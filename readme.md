@@ -28,8 +28,8 @@ It enables full **digital mode operation** (receive and transmit) on the **2-met
 ## 🔧 Usage
 
 The HAT can operate either:
-1. **Internally**, when mounted inside the uConsole through the exposed 4-pin connector, **or**
-2. **Externally**, as a standalone portable interface connected via **USB-C**.
+1. **Internally**, mounted on the top of the uConsole, and connected inside the uConsole through the exposed 4-pin connector, **or**
+2. **Externally**, using any other computer, as a standalone portable interface connected via **USB-C**.
 
 This flexibility allows the board to serve as both a fixed and field-portable digital interface for modern ham operators.
 
