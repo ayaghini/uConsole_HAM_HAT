@@ -35,7 +35,11 @@ This flexibility allows the board to serve as both a fixed and field-portable di
 
 ---
 
-## 🛠️ Hardware Update (2025-10-30)
+## 🛠️ Hardware Update 
+### (2025-11-01)
+I used an original Digirig I had on hand to connect one of the SA818S modules I received from NiceRF in order to test the proof of concept (POC) before proceeding with the PCB order. I used the program from [SRFRS](https://github.com/jumbo5566/SRFRS). All OK.
+
+### (2025-10-30)
 
 The **PCB design is complete**, and I’m performing final checks before submitting the first production batch.
 
