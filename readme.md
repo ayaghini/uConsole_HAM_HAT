@@ -36,6 +36,25 @@ This flexibility allows the board to serve as both a fixed and field-portable di
 ---
 
 ## 🛠️ Hardware Update 
+### (2025-11-11)
+
+While the **first prototype** is being manufactured by **PCBWay**, I’ve made a few **minor improvements** to the design — primarily noted by my enclosure CAD work and manufacturing feedback.
+
+This revision will use a **4-layer PCB** instead of the original 6-layer design. I’ll be experimenting with this to evaluate whether it provides sufficient signal integrity and isolation.
+
+####  Design Changes
+-  **SMA connector** changed to a **panel-mount** version for improved mechanical strength and enclosure fit.  
+-  **USB connector** changed from **vertical** to **horizontal** orientation for better cable clearance.  
+-  **BOM updated** — now includes full **Manufacturer Part Numbers (MPNs)** to streamline fabrication and assembly.  
+-  **Component updates:** minor changes in package size and component values based on PCB manufacturer feedback (no functional impact).
+
+---
+
+> These refinements aim to simplify production, improve mechanical integration, and test a more cost-effective 4-layer configuration without compromising RF or audio performance.
+
+
+![uConsole HAM Radio HAT PCB - rev01](/Pictures/Screenshot 2025-11-11 223535.png)
+
 ### (2025-11-01)
 I used an original Digirig I had on hand to connect one of the SA818S modules I received from NiceRF in order to test the proof of concept (POC) before proceeding with the PCB order. I used the program from [SRFRS](https://github.com/jumbo5566/SRFRS). All OK.
 
