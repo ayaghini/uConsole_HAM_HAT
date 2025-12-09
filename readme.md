@@ -36,6 +36,10 @@ This flexibility allows the board to serve as both a fixed and field-portable di
 ---
 
 ## 🛠️ Hardware Update 
+### (2025-12-08)
+The first batch arrived today. I am pleased that every single functionality works.
+![uConsole HAM Radio HAT - first batch](/Pictures/IMG_9012.jpeg)
+
 ### (2025-11-11)
 
 While the **first prototype** is being manufactured by **PCBWay**, I’ve made a few **minor improvements** to the design — primarily noted by my enclosure CAD work and manufacturing feedback.
