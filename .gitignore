@@ -3,3 +3,8 @@
 /Resources
 /CAD
 design.md
+
+# Python runtime artifacts
+.venv/
+__pycache__/
+*.pyc
