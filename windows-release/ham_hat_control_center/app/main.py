@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import threading
+import wave
 from datetime import datetime
 from pathlib import Path
 from time import sleep
@@ -19,6 +20,7 @@ from tkinter.scrolledtext import ScrolledText
 
 import numpy as np
 from serial.tools import list_ports
+import sounddevice as sd
 
 from aprs_modem import (
     build_aprs_ack_payload,
@@ -84,7 +86,7 @@ class HamHatControlApp(tk.Tk):
         self.disable_highpass_var = tk.BooleanVar(value=True)
         self.disable_lowpass_var = tk.BooleanVar(value=True)
 
-        self.volume_var = tk.IntVar(value=5)
+        self.volume_var = tk.IntVar(value=8)
         self.offline_bootstrap_var = tk.BooleanVar(value=False)
         self.test_tone_freq_var = tk.StringVar(value="1200")
         self.test_tone_duration_var = tk.StringVar(value="2.0")
@@ -107,9 +109,9 @@ class HamHatControlApp(tk.Tk):
         self.aprs_rx_duration_var = tk.StringVar(value="10")
         self.aprs_rx_chunk_var = tk.StringVar(value="2.0")
         self.aprs_rx_auto_var = tk.BooleanVar(value=False)
-        # Baseline defaults that matched earlier handheld-decodable tests.
-        self.aprs_tx_gain_var = tk.StringVar(value="0.12")
-        self.aprs_preamble_flags_var = tk.StringVar(value="160")
+        # Baseline defaults validated over-the-air with handheld decode.
+        self.aprs_tx_gain_var = tk.StringVar(value="0.34")
+        self.aprs_preamble_flags_var = tk.StringVar(value="240")
         self.aprs_tx_repeats_var = tk.StringVar(value="1")
         self.ptt_enabled_var = tk.BooleanVar(value=True)
         self.ptt_line_var = tk.StringVar(value="RTS")
@@ -318,6 +320,12 @@ class HamHatControlApp(tk.Tk):
             text="Re-init SA818 before APRS TX",
             variable=self.aprs_tx_reinit_var,
         ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 0))
+        ttk.Button(rx, text="TX Channel Announce Sweep", command=self.tx_channel_announce_sweep).grid(
+            row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+        )
+        ttk.Button(rx, text="Auto Detect RX by Voice", command=self.auto_detect_input_by_voice).grid(
+            row=11, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
 
         right = ttk.LabelFrame(parent, text="APRS Monitor", padding=8)
         right.pack(side="left", fill="both", expand=True, padx=(10, 0))
@@ -585,8 +593,14 @@ class HamHatControlApp(tk.Tk):
 
             if not text:
                 raise ValueError("APRS text is required")
+            # Emit a valid APRS message payload rather than raw text.
+            payload = build_aprs_message_payload(
+                addressee=self.aprs_msg_to_var.get(),
+                text=text,
+                message_id=self.aprs_msg_id_var.get(),
+            )
             # Use the same TX engine as APRS tab message/position send to avoid path-specific jitter.
-            self._send_aprs_payload(text, "manual")
+            self._send_aprs_payload(payload, "manual")
         except Exception as exc:  # noqa: BLE001
             self.log(f"Play APRS failed: {exc}")
             messagebox.showerror("APRS Audio Error", str(exc))
@@ -745,6 +759,12 @@ class HamHatControlApp(tk.Tk):
                     self._set_input_device_by_index(in_idx)
                     self._update_audio_hints_from_selection()
                     self.log(f"Applied audio pair: output {out_idx}, input {in_idx}")
+                elif kind == "set_input_device":
+                    in_idx = int(a)
+                    self.refresh_input_devices()
+                    self._set_input_device_by_index(in_idx)
+                    self._update_audio_hints_from_selection()
+                    self.log(f"Applied input device: {in_idx}")
                 elif kind == "auto_ack":
                     try:
                         ack_payload = build_aprs_ack_payload(addressee=a, message_id=(b or ""))
@@ -901,7 +921,7 @@ class HamHatControlApp(tk.Tk):
             message=payload,
             tx_gain=gain,
             preamble_flags=preamble_flags,
-            trailing_flags=12,
+            trailing_flags=16,
         )
         self._transmit_aprs_wav_worker(wav_path, cfg, f"APRS {tag}")
         self._aprs_log(f"TX {source}>{destination},{path}:{payload}")
@@ -935,6 +955,11 @@ class HamHatControlApp(tk.Tk):
                 dcs_rx=None,
             )
         )
+        # Keep TX modulation path flat for APRS tones.
+        try:
+            self.client.set_filters(True, True, True)
+        except Exception as exc:  # noqa: BLE001
+            self._queue_log(f"Filter set warning before TX: {exc}")
         self.client.set_volume(max(1, min(8, vol)))
 
         self._queue_log(f"Starting {label}: {wav_path} [out_dev={out_dev}]")
@@ -1106,6 +1131,191 @@ class HamHatControlApp(tk.Tk):
                         pass
                 if was_rx_running and self.aprs_rx_auto_var.get():
                     self.start_rx_monitor()
+
+        self._audio_worker = threading.Thread(target=worker, daemon=True)
+        self._audio_worker.start()
+
+    @staticmethod
+    def _voice_activity_score(samples: np.ndarray) -> float:
+        x = np.asarray(samples, dtype=np.float32).reshape(-1)
+        if len(x) < 32:
+            return 0.0
+        x = x - float(np.mean(x))
+        rms = float(np.sqrt(np.mean(x * x)))
+        p95 = float(np.percentile(np.abs(x), 95))
+        return (0.7 * rms) + (0.3 * p95)
+
+    def _synthesize_speech_wav(self, text: str, out_path: Path) -> None:
+        msg = text.replace("'", "''")
+        wav = str(out_path).replace("'", "''")
+        ps = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "$s.Rate=0; $s.Volume=100; "
+            f"$s.SetOutputToWaveFile('{wav}'); "
+            f"$s.Speak('{msg}'); "
+            "$s.Dispose()"
+        )
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0 or not out_path.exists():
+            detail = (proc.stderr or proc.stdout or "speech synthesis failed").strip()
+            raise RuntimeError(detail)
+
+    @staticmethod
+    def _play_wav_on_device_compatible(path: Path, device_index: int) -> None:
+        # Use device-native sample rate/channel layout so announce sweep works across host APIs.
+        with wave.open(str(path), "rb") as wav:
+            channels = wav.getnchannels()
+            width = wav.getsampwidth()
+            src_rate = wav.getframerate()
+            frames = wav.readframes(wav.getnframes())
+        if width != 2:
+            raise RuntimeError("Speech WAV must be 16-bit PCM")
+
+        mono = np.frombuffer(frames, dtype=np.int16)
+        if channels > 1:
+            mono = mono.reshape(-1, channels)[:, 0]
+        mono_f = mono.astype(np.float32)
+
+        info = sd.query_devices(device_index)
+        dst_rate = int(round(float(info.get("default_samplerate", src_rate))))
+        if dst_rate <= 0:
+            dst_rate = int(src_rate)
+        if dst_rate != src_rate and len(mono_f) > 1:
+            src_n = len(mono_f)
+            dst_n = max(1, int(round(src_n * (float(dst_rate) / float(src_rate)))))
+            xp = np.linspace(0.0, 1.0, src_n, endpoint=False)
+            xq = np.linspace(0.0, 1.0, dst_n, endpoint=False)
+            mono_f = np.interp(xq, xp, mono_f).astype(np.float32)
+
+        stereo = np.column_stack(
+            (
+                np.clip(mono_f, -32768.0, 32767.0).astype(np.int16),
+                np.clip(mono_f, -32768.0, 32767.0).astype(np.int16),
+            )
+        )
+        sd.stop()
+        sd.play(stereo, samplerate=dst_rate, device=device_index, blocking=True)
+
+    def tx_channel_announce_sweep(self) -> None:
+        if platform.system().lower() != "windows":
+            messagebox.showerror("TX Sweep", "TX channel announce is currently implemented for Windows only")
+            return
+        if not self.client.connected:
+            messagebox.showerror("TX Sweep", "Connect to SA818 first")
+            return
+        if self._audio_worker and self._audio_worker.is_alive():
+            messagebox.showwarning("TX Sweep", "Audio worker is busy; stop current playback/capture first")
+            return
+        # Read tkinter state on UI thread before entering worker thread.
+        pre_s, post_s = self._ptt_timings_sec()
+        ptt_line = self.ptt_line_var.get().strip().upper()
+        ptt_active_high = bool(self.ptt_active_high_var.get())
+
+        def worker() -> None:
+            try:
+                outputs = list_output_devices()
+                usb_outputs = [(idx, name) for idx, name in outputs if "usb audio device" in name.lower()]
+                if usb_outputs:
+                    outputs = usb_outputs
+                if not outputs:
+                    raise RuntimeError("No audio output devices found")
+
+                self._queue_log(
+                    "TX announce sweep started. Listen on handheld for spoken 'channel N' and note matching N."
+                )
+                for out_idx, out_name in outputs:
+                    wav_path = AUDIO_DIR / f"announce_ch_{out_idx}.wav"
+                    wav_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        self._synthesize_speech_wav(
+                            f"This is channel {out_idx}. This is channel {out_idx}.",
+                            wav_path,
+                        )
+                        with self._audio_lock:
+                            self.client.set_ptt(True, line=ptt_line, active_high=ptt_active_high)
+                            try:
+                                if pre_s > 0:
+                                    sleep(pre_s)
+                                self._play_wav_on_device_compatible(wav_path, out_idx)
+                                if post_s > 0:
+                                    sleep(post_s)
+                            finally:
+                                self.client.set_ptt(False, line=ptt_line, active_high=ptt_active_high)
+                        self._queue_log(f"Announced TX channel {out_idx}: {out_name}")
+                    except Exception as exc:  # noqa: BLE001
+                        self._queue_log(f"TX announce skipped channel {out_idx}: {exc}")
+                    sleep(1.2)
+                self._queue_log("TX announce sweep complete. Select heard channel in Audio Output.")
+            except Exception as exc:  # noqa: BLE001
+                self._queue_error("TX Sweep Error", str(exc))
+
+        self._audio_worker = threading.Thread(target=worker, daemon=True)
+        self._audio_worker.start()
+
+    def auto_detect_input_by_voice(self) -> None:
+        if platform.system().lower() != "windows":
+            messagebox.showerror("RX Detect", "RX input detection is currently implemented for Windows only")
+            return
+        if self._audio_worker and self._audio_worker.is_alive():
+            messagebox.showwarning("RX Detect", "Audio worker is busy; stop current playback/capture first")
+            return
+
+        def worker() -> None:
+            try:
+                inputs = list_input_devices()
+                usb_inputs = [(idx, name) for idx, name in inputs if "usb audio device" in name.lower()]
+                if usb_inputs:
+                    inputs = usb_inputs
+                if not inputs:
+                    raise RuntimeError("No audio input devices found")
+
+                capture_s = 2.2
+                total_s = capture_s * len(inputs)
+                self._queue_log(
+                    f"RX voice detect started. Hold handheld PTT and repeat '1 2 3 4' continuously for ~{total_s:.0f}s."
+                )
+                scored: list[tuple[float, int, str]] = []
+                failed_inputs: list[tuple[int, str, str]] = []
+                for in_idx, in_name in inputs:
+                    try:
+                        with self._audio_lock:
+                            _, mono = capture_samples(seconds=capture_s, device_index=in_idx)
+                        score = self._voice_activity_score(mono)
+                        scored.append((score, in_idx, in_name))
+                        self._queue_log(f"RX score input {in_idx}: {score:.4f} ({in_name})")
+                    except Exception as exc:  # noqa: BLE001
+                        failed_inputs.append((in_idx, in_name, str(exc)))
+                        self._queue_log(f"RX input {in_idx} skipped: {exc}")
+
+                if not scored:
+                    if failed_inputs:
+                        raise RuntimeError(
+                            "No usable RX inputs. Audio backend could not open candidate devices. "
+                            "Try switching USB audio endpoint/API and retry."
+                        )
+                    raise RuntimeError("No candidate RX inputs produced audio data.")
+
+                scored.sort(key=lambda x: x[0], reverse=True)
+                best_score, best_idx, best_name = scored[0]
+                second_score = scored[1][0] if len(scored) > 1 else 0.0
+                if best_score < 0.004:
+                    self._queue_log(
+                        "RX detect warning: weak signal seen on all inputs. Selecting strongest candidate anyway."
+                    )
+                if second_score > 0 and (best_score / max(second_score, 1e-9)) < 1.25:
+                    self._queue_log(
+                        "RX detect warning: top two inputs are close in score. Selecting strongest candidate."
+                    )
+                self._ui_queue.put(("set_input_device", str(best_idx), None))
+                self._queue_log(f"RX input auto-selected: {best_idx} ({best_name})")
+            except Exception as exc:  # noqa: BLE001
+                self._queue_error("RX Detect Error", str(exc))
 
         self._audio_worker = threading.Thread(target=worker, daemon=True)
         self._audio_worker.start()
@@ -1364,7 +1574,7 @@ class HamHatControlApp(tk.Tk):
             if not silent:
                 messagebox.showinfo("Info", "No saved profile found")
             return
-        data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(PROFILE_PATH.read_text(encoding="utf-8-sig"))
         self.frequency_var.set(data.get("frequency", "145.070"))
         self.offset_var.set(data.get("offset", "0.6"))
         self.squelch_var.set(data.get("squelch", "4"))
@@ -1397,8 +1607,8 @@ class HamHatControlApp(tk.Tk):
         self.aprs_rx_duration_var.set(data.get("aprs_rx_duration", "10"))
         self.aprs_rx_chunk_var.set(data.get("aprs_rx_chunk", "2.0"))
         self.aprs_rx_auto_var.set(bool(data.get("aprs_rx_auto", False)))
-        self.aprs_tx_gain_var.set(data.get("aprs_tx_gain", "0.24"))
-        self.aprs_preamble_flags_var.set(data.get("aprs_preamble_flags", "160"))
+        self.aprs_tx_gain_var.set(data.get("aprs_tx_gain", "0.34"))
+        self.aprs_preamble_flags_var.set(data.get("aprs_preamble_flags", "240"))
         self.aprs_tx_repeats_var.set(data.get("aprs_tx_repeats", "1"))
         self.audio_device_var.set(data.get("audio_device", "Default"))
         self.sa818_audio_output_hint = data.get("sa818_audio_output_hint", "")

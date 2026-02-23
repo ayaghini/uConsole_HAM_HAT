@@ -1,6 +1,6 @@
 ﻿# uConsole HAM HAT Control Center (Windows)
 
-This is the Windows build/test bundle for the same app used on Raspberry Pi.
+This is the Windows build/test bundle for the uConsole HAM HAT control app.
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ EXE output:
 
 ## Notes
 
-- Functionality is identical to the Raspberry Pi version.
+- This Windows package includes APRS TX/RX workflows and audio-device mapping tools.
 - Requires Python 3 and internet for first-time dependency install.
 - You can run third-party bootstrap from the Setup tab in the app.
 - Audio playback uses selectable output devices; choose the correct USB audio endpoint in `Audio Output`.
@@ -60,7 +60,7 @@ EXE output:
 2. Configure `Source`, `Destination`, and `Path`.
 3. For APRS message:
    - Set `To (Message)`, `Text`, optional `Msg ID`
-   - Set `TX Gain` (start with `0.60`)
+   - Set `TX Gain` (start with `0.12`, valid range `0.05` to `0.40`)
    - Click `Send APRS Message`
 4. For APRS position:
    - Set decimal `Latitude` and `Longitude`, optional `Comment`
