@@ -54,10 +54,15 @@ def list_output_devices() -> list[tuple[int, str]]:
             chosen[key] = item
     out = list(chosen.values())
     if out:
-        # Prefer endpoint APIs on Windows when available.
-        preferred = [x for x in out if x[0] <= 1]
-        if preferred:
-            out = preferred
+        # Prefer WASAPI first; fallback to MME only when WASAPI is unavailable.
+        wasapi = [x for x in out if x[0] == 0]
+        if wasapi:
+            out = wasapi
+        else:
+            preferred = [x for x in out if x[0] <= 1]
+            if preferred:
+                out = preferred
+    out = [x for x in out if "sound mapper" not in x[2].strip().lower()]
     out.sort(key=lambda x: x[2].lower())
     return [(idx, name) for _, idx, name, _ in out]
 
@@ -94,9 +99,14 @@ def list_input_devices() -> list[tuple[int, str]]:
             chosen[key] = item
     out = list(chosen.values())
     if out:
-        preferred = [x for x in out if x[0] <= 1]
-        if preferred:
-            out = preferred
+        wasapi = [x for x in out if x[0] == 0]
+        if wasapi:
+            out = wasapi
+        else:
+            preferred = [x for x in out if x[0] <= 1]
+            if preferred:
+                out = preferred
+    out = [x for x in out if "sound mapper" not in x[2].strip().lower()]
     out.sort(key=lambda x: x[2].lower())
     return [(idx, name) for _, idx, name, _ in out]
 
@@ -158,6 +168,53 @@ def play_wav_blocking(path: Path, device_index: int | None = None) -> None:
         raise RuntimeError("No audio playback backend available. Install sounddevice or use Windows winsound.")
     flags = winsound.SND_FILENAME | winsound.SND_SYNC | winsound.SND_NODEFAULT
     winsound.PlaySound(str(path), flags)
+
+
+def play_wav_blocking_compatible(path: Path, device_index: int) -> None:
+    """
+    Play WAV on a selected device using a conservative, device-compatible path.
+    - Converts source to mono.
+    - Resamples to the device default sample rate.
+    - Tries mono first, then falls back to multichannel with signal on channel 0.
+    """
+    if sd is None or np is None:
+        raise RuntimeError("sounddevice/numpy are required for compatible playback")
+    with wave.open(str(path), "rb") as wav:
+        channels = wav.getnchannels()
+        width = wav.getsampwidth()
+        src_rate = wav.getframerate()
+        frames = wav.readframes(wav.getnframes())
+    if width != 2:
+        raise RuntimeError("Only 16-bit PCM WAV is supported")
+
+    mono = np.frombuffer(frames, dtype=np.int16)
+    if channels > 1:
+        mono = mono.reshape(-1, channels)[:, 0]
+    mono_f = mono.astype(np.float32) / 32768.0
+
+    info = sd.query_devices(device_index)
+    dst_rate = int(round(float(info.get("default_samplerate", src_rate))))
+    if dst_rate <= 0:
+        dst_rate = int(src_rate)
+    if dst_rate != src_rate and len(mono_f) > 1:
+        src_n = len(mono_f)
+        dst_n = max(1, int(round(src_n * (float(dst_rate) / float(src_rate)))))
+        xp = np.linspace(0.0, 1.0, src_n, endpoint=False)
+        xq = np.linspace(0.0, 1.0, dst_n, endpoint=False)
+        mono_f = np.interp(xq, xp, mono_f).astype(np.float32)
+
+    mono_f = np.clip(mono_f, -1.0, 1.0)
+    sd.stop()
+    try:
+        sd.play(mono_f, samplerate=dst_rate, device=device_index, blocking=True)
+        return
+    except Exception:
+        max_ch = int(info.get("max_output_channels", 0) or 0)
+        if max_ch < 2:
+            raise
+        shaped = np.zeros((len(mono_f), max_ch), dtype=np.float32)
+        shaped[:, 0] = mono_f
+        sd.play(shaped, samplerate=dst_rate, device=device_index, blocking=True)
 
 
 def stop_playback() -> None:

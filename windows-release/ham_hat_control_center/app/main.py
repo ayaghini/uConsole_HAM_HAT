@@ -41,6 +41,7 @@ from audio_tools import (
     list_input_devices,
     list_output_devices,
     play_wav_blocking,
+    play_wav_blocking_compatible,
     record_wav,
     stop_playback,
     wav_duration_seconds,
@@ -1346,6 +1347,53 @@ class HamHatControlApp(tk.Tk):
         except ValueError:
             return None
 
+    def _record_wav_compatible(self, path: Path, seconds: float, device_index: int | None = None) -> None:
+        # Some Windows USB audio drivers fail when opened from background threads.
+        if platform.system().lower() == "windows" and threading.current_thread() is not threading.main_thread():
+            script = APP_DIR / "scripts" / "capture_wav_worker.py"
+            if not script.exists():
+                raise RuntimeError(f"Missing script: {script}")
+            dev = -1 if device_index is None else int(device_index)
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--wav",
+                    str(path),
+                    "--seconds",
+                    f"{float(seconds):.3f}",
+                    "--input-device",
+                    str(dev),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout or f"exit={proc.returncode}").strip()
+                raise RuntimeError(detail)
+            return
+        record_wav(path, seconds=seconds, device_index=device_index)
+
+    def _capture_samples_compatible(self, seconds: float, device_index: int | None = None) -> tuple[int, np.ndarray]:
+        if platform.system().lower() != "windows" or threading.current_thread() is threading.main_thread():
+            return capture_samples(seconds=seconds, device_index=device_index)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        wav_path = AUDIO_DIR / f"rx_chunk_{ts}.wav"
+        self._record_wav_compatible(wav_path, seconds=seconds, device_index=device_index)
+        with wave.open(str(wav_path), "rb") as wavf:
+            rate = int(wavf.getframerate())
+            channels = int(wavf.getnchannels())
+            frames = wavf.readframes(wavf.getnframes())
+        mono = np.frombuffer(frames, dtype=np.int16)
+        if channels > 1:
+            mono = mono.reshape(-1, channels)[:, 0]
+        try:
+            wav_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return rate, mono.astype(np.float32) / 32768.0
+
     def _set_audio_device_by_index(self, idx: int) -> None:
         token = f"{idx}:"
         for entry in self.audio_device_combo["values"]:
@@ -2056,7 +2104,7 @@ class HamHatControlApp(tk.Tk):
 
                             def rec_worker() -> None:
                                 try:
-                                    record_wav(rx_wav, seconds=rec_sec, device_index=in_idx)
+                                    self._record_wav_compatible(rx_wav, seconds=rec_sec, device_index=in_idx)
                                 except Exception as exc:  # noqa: BLE001
                                     rec_exc.append(exc)
 
@@ -2145,34 +2193,30 @@ class HamHatControlApp(tk.Tk):
 
     @staticmethod
     def _play_wav_on_device_compatible(path: Path, device_index: int) -> None:
-        # Use mono playback at device-native rate to match SA818 USB mono audio.
-        with wave.open(str(path), "rb") as wav:
-            channels = wav.getnchannels()
-            width = wav.getsampwidth()
-            src_rate = wav.getframerate()
-            frames = wav.readframes(wav.getnframes())
-        if width != 2:
-            raise RuntimeError("Speech WAV must be 16-bit PCM")
-
-        mono = np.frombuffer(frames, dtype=np.int16)
-        if channels > 1:
-            mono = mono.reshape(-1, channels)[:, 0]
-        mono_f = mono.astype(np.float32)
-
-        info = sd.query_devices(device_index)
-        dst_rate = int(round(float(info.get("default_samplerate", src_rate))))
-        if dst_rate <= 0:
-            dst_rate = int(src_rate)
-        if dst_rate != src_rate and len(mono_f) > 1:
-            src_n = len(mono_f)
-            dst_n = max(1, int(round(src_n * (float(dst_rate) / float(src_rate)))))
-            xp = np.linspace(0.0, 1.0, src_n, endpoint=False)
-            xq = np.linspace(0.0, 1.0, dst_n, endpoint=False)
-            mono_f = np.interp(xq, xp, mono_f).astype(np.float32)
-
-        mono_i16 = np.clip(mono_f, -32768.0, 32767.0).astype(np.int16)
-        sd.stop()
-        sd.play(mono_i16, samplerate=dst_rate, device=device_index, blocking=True)
+        # Known Windows quirk: some WASAPI devices fail when opened from a worker thread.
+        # Run playback in a dedicated child process first, then fallback in-process.
+        script = APP_DIR / "scripts" / "play_wav_worker.py"
+        if script.exists():
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--wav",
+                    str(path),
+                    "--output-device",
+                    str(int(device_index)),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.returncode == 0:
+                return
+            detail = (proc.stderr or proc.stdout or "").strip()
+            if detail:
+                raise RuntimeError(detail)
+            raise RuntimeError(f"Playback worker failed with code {proc.returncode}")
+        play_wav_blocking_compatible(path, device_index=device_index)
 
     def tx_channel_announce_sweep(self) -> None:
         if platform.system().lower() != "windows":
@@ -2259,9 +2303,26 @@ class HamHatControlApp(tk.Tk):
                 failed_inputs: list[tuple[int, str, str]] = []
                 for in_idx, in_name in inputs:
                     try:
-                        with self._audio_lock:
-                            _, mono = capture_samples(seconds=capture_s, device_index=in_idx)
-                        score = self._voice_activity_score(mono)
+                        script = APP_DIR / "scripts" / "rx_score_worker.py"
+                        if not script.exists():
+                            raise RuntimeError(f"Missing script: {script}")
+                        proc = subprocess.run(
+                            [
+                                sys.executable,
+                                str(script),
+                                "--seconds",
+                                f"{capture_s:.3f}",
+                                "--input-device",
+                                str(int(in_idx)),
+                            ],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        if proc.returncode != 0:
+                            detail = (proc.stderr or proc.stdout or f"exit={proc.returncode}").strip()
+                            raise RuntimeError(detail)
+                        score = float((proc.stdout or "0").strip().splitlines()[-1])
                         scored.append((score, in_idx, in_name))
                         self._queue_log(f"RX score input {in_idx}: {score:.4f} ({in_name})")
                     except Exception as exc:  # noqa: BLE001
@@ -2401,7 +2462,7 @@ class HamHatControlApp(tk.Tk):
                 dev = self._selected_input_device()
                 self._aprs_log(f"RX capture started ({secs:.1f}s) to {wav_path}")
                 with self._audio_lock:
-                    record_wav(wav_path, seconds=secs, device_index=dev)
+                    self._record_wav_compatible(wav_path, seconds=secs, device_index=dev)
                 packets = decode_ax25_from_wav(str(wav_path))
                 if not packets:
                     self._aprs_log("RX decode: no APRS packets found")
@@ -2449,7 +2510,7 @@ class HamHatControlApp(tk.Tk):
                     sleep(0.05)
                     continue
                 try:
-                    rate, mono = capture_samples(seconds=chunk, device_index=dev)
+                    rate, mono = self._capture_samples_compatible(seconds=chunk, device_index=dev)
                 finally:
                     self._audio_lock.release()
                 overlap = self._rx_overlap_samples
