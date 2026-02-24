@@ -26,26 +26,40 @@ def list_output_devices() -> list[tuple[int, str]]:
         return []
     hostapis = sd.query_hostapis()
     devices = sd.query_devices()
-    ranked: list[tuple[int, int, str]] = []
+    ranked: list[tuple[int, int, str, str]] = []
     for idx, dev in enumerate(devices):
         if dev.get("max_output_channels", 0) > 0:
             hostapi_idx = int(dev.get("hostapi", 0))
             hostapi_name = str(hostapis[hostapi_idx].get("name", "Unknown")) if hostapi_idx < len(hostapis) else "Unknown"
-            # DirectSound is often less stable for modem-grade AFSK on Windows.
+            # Exclude DirectSound duplicate paths; favor endpoint-style APIs.
             if hostapi_name == "Windows DirectSound":
                 continue
             name = str(dev.get("name", f"Device {idx}"))
-            if "Windows WDM-KS" in hostapi_name:
+            if hostapi_name == "Windows WASAPI":
                 rank = 0
             elif hostapi_name == "MME":
                 rank = 1
-            elif hostapi_name == "Windows WASAPI":
+            elif "Windows WDM-KS" in hostapi_name:
                 rank = 2
             else:
                 rank = 3
-            ranked.append((rank, idx, f"{name} [{hostapi_name}]"))
+            ranked.append((rank, idx, name, hostapi_name))
     ranked.sort(key=lambda x: (x[0], x[1]))
-    return [(idx, name) for _, idx, name in ranked]
+
+    # Keep one entry per device name, preferring WASAPI then MME.
+    chosen: dict[str, tuple[int, int, str, str]] = {}
+    for item in ranked:
+        key = item[2].strip().lower()
+        if key not in chosen:
+            chosen[key] = item
+    out = list(chosen.values())
+    if out:
+        # Prefer endpoint APIs on Windows when available.
+        preferred = [x for x in out if x[0] <= 1]
+        if preferred:
+            out = preferred
+    out.sort(key=lambda x: x[2].lower())
+    return [(idx, name) for _, idx, name, _ in out]
 
 
 def list_input_devices() -> list[tuple[int, str]]:
@@ -54,7 +68,7 @@ def list_input_devices() -> list[tuple[int, str]]:
         return []
     hostapis = sd.query_hostapis()
     devices = sd.query_devices()
-    ranked: list[tuple[int, int, str]] = []
+    ranked: list[tuple[int, int, str, str]] = []
     for idx, dev in enumerate(devices):
         if dev.get("max_input_channels", 0) > 0:
             hostapi_idx = int(dev.get("hostapi", 0))
@@ -62,17 +76,29 @@ def list_input_devices() -> list[tuple[int, str]]:
             if hostapi_name == "Windows DirectSound":
                 continue
             name = str(dev.get("name", f"Device {idx}"))
-            if "Windows WDM-KS" in hostapi_name:
+            if hostapi_name == "Windows WASAPI":
                 rank = 0
             elif hostapi_name == "MME":
                 rank = 1
-            elif hostapi_name == "Windows WASAPI":
+            elif "Windows WDM-KS" in hostapi_name:
                 rank = 2
             else:
                 rank = 3
-            ranked.append((rank, idx, f"{name} [{hostapi_name}]"))
+            ranked.append((rank, idx, name, hostapi_name))
     ranked.sort(key=lambda x: (x[0], x[1]))
-    return [(idx, name) for _, idx, name in ranked]
+
+    chosen: dict[str, tuple[int, int, str, str]] = {}
+    for item in ranked:
+        key = item[2].strip().lower()
+        if key not in chosen:
+            chosen[key] = item
+    out = list(chosen.values())
+    if out:
+        preferred = [x for x in out if x[0] <= 1]
+        if preferred:
+            out = preferred
+    out.sort(key=lambda x: x[2].lower())
+    return [(idx, name) for _, idx, name, _ in out]
 
 
 def play_wav(path: Path, device_index: int | None = None) -> None:

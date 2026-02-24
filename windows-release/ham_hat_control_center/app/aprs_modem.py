@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import re
 import wave
 from dataclasses import dataclass
 
@@ -11,6 +12,8 @@ import numpy as np
 
 
 FLAG_BITS = [0, 1, 1, 1, 1, 1, 1, 0]  # 0x7E, LSB-first
+APRS_MESSAGE_TEXT_MAX = 67
+GROUP_WIRE_RE = re.compile(r"^@GRP/([A-Z0-9_-]{1,16})(?:/([0-9]{1,2})/([0-9]{1,2}))?:(.*)$", flags=re.IGNORECASE)
 
 
 @dataclass
@@ -24,7 +27,7 @@ class DecodedPacket:
 
 def build_aprs_message_payload(addressee: str, text: str, message_id: str = "") -> str:
     to_field = addressee.strip().upper()[:9].ljust(9)
-    msg = text.strip()[:67]
+    msg = text.strip()[:APRS_MESSAGE_TEXT_MAX]
     mid = message_id.strip()[:5]
     suffix = f"{{{mid}" if mid else ""
     return f":{to_field}:{msg}{suffix}"
@@ -47,6 +50,54 @@ def parse_aprs_message_info(info: str) -> tuple[str, str, str | None] | None:
     """
     if not info.startswith(":") or len(info) < 12:
         return None
+
+
+def split_aprs_text_chunks(text: str, max_len: int = APRS_MESSAGE_TEXT_MAX) -> list[str]:
+    body = text.strip()
+    if not body:
+        return []
+    limit = max(1, int(max_len))
+    if len(body) <= limit:
+        return [body]
+
+    chunks: list[str] = []
+    remaining = body
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        cut = remaining.rfind(" ", 0, limit + 1)
+        if cut < max(8, int(limit * 0.45)):
+            cut = limit
+        chunk = remaining[:cut].rstrip()
+        if not chunk:
+            chunk = remaining[:limit]
+        chunks.append(chunk)
+        remaining = remaining[len(chunk):].lstrip()
+    return chunks
+
+
+def build_group_wire_text(group: str, body: str, part: int | None = None, total: int | None = None) -> str:
+    g = group.strip().upper()
+    if not g or len(g) > 16 or not re.fullmatch(r"[A-Z0-9_-]+", g):
+        raise ValueError("Group name must match [A-Z0-9_-]{1,16}")
+    payload = body.strip()
+    if part is None or total is None:
+        return f"@GRP/{g}:{payload}"
+    if part < 1 or total < 1 or part > total or total > 99:
+        raise ValueError("Invalid group chunk numbering")
+    return f"@GRP/{g}/{part}/{total}:{payload}"
+
+
+def parse_group_wire_text(text: str) -> tuple[str, str, int | None, int | None] | None:
+    m = GROUP_WIRE_RE.match(text.strip())
+    if not m:
+        return None
+    group = m.group(1).upper()
+    part = int(m.group(2)) if m.group(2) else None
+    total = int(m.group(3)) if m.group(3) else None
+    body = m.group(4).strip()
+    return group, body, part, total
     try:
         addressee = info[1:10].strip().upper()
         if info[10] != ":":

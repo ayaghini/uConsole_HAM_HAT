@@ -24,13 +24,17 @@ from serial.tools import list_ports
 import sounddevice as sd
 
 from aprs_modem import (
+    APRS_MESSAGE_TEXT_MAX,
     build_aprs_ack_payload,
+    build_group_wire_text,
     build_aprs_message_payload,
     build_aprs_position_payload,
     decode_ax25_from_samples,
     decode_ax25_from_wav,
     parse_aprs_message_info,
+    parse_group_wire_text,
     parse_aprs_position_info,
+    split_aprs_text_chunks,
 )
 from audio_tools import (
     capture_samples,
@@ -164,6 +168,8 @@ class HamHatControlApp(tk.Tk):
         self._heard_stations: list[str] = []
         self._chat_groups: dict[str, list[str]] = {}
         self._chat_messages: list[dict[str, str]] = []
+        self._chat_threads_unread: dict[str, int] = {}
+        self._active_thread_key = ""
         self._last_direct_sender = ""
         self.chat_new_contact_var = tk.StringVar(value="")
         self.chat_group_name_var = tk.StringVar(value="")
@@ -364,7 +370,7 @@ class HamHatControlApp(tk.Tk):
         right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         left.columnconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
+        right.rowconfigure(2, weight=1)
 
         identity = ttk.LabelFrame(left, text="APRS Identity + TX Tuning", padding=8)
         identity.pack(fill="x")
@@ -519,7 +525,7 @@ class HamHatControlApp(tk.Tk):
 
     def _build_comms_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=2)
+        parent.columnconfigure(1, weight=3)
         parent.rowconfigure(0, weight=1)
 
         left = ttk.Frame(parent)
@@ -570,20 +576,34 @@ class HamHatControlApp(tk.Tk):
 
         target = ttk.LabelFrame(right, text="Conversation", padding=8)
         target.grid(row=0, column=0, sticky="ew")
-        target.columnconfigure(1, weight=1)
-        ttk.Label(target, text="Target").grid(row=0, column=0, sticky="w")
-        ttk.Label(target, textvariable=self.chat_target_var).grid(row=0, column=1, sticky="w")
-        ttk.Button(target, text="Reply Last RX", command=self.reply_last_sender).grid(row=0, column=2, padx=(8, 0))
+        target.columnconfigure(0, weight=1)
+        ttk.Label(target, text="Selected Thread").grid(row=0, column=0, sticky="w")
+        ttk.Label(target, textvariable=self.chat_target_var).grid(row=1, column=0, sticky="w", pady=(2, 4))
+        ttk.Button(target, text="Reply Last RX", command=self.reply_last_sender).grid(row=0, column=1, rowspan=2, padx=(8, 0))
+
+        threads = ttk.LabelFrame(right, text="Inbox Threads", padding=8)
+        threads.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        threads.columnconfigure(0, weight=1)
+        threads.rowconfigure(0, weight=1)
+        self.chat_threads_list = tk.Listbox(threads, height=7, exportselection=False)
+        self.chat_threads_list.grid(row=0, column=0, sticky="nsew")
+        self.chat_threads_list.bind("<<ListboxSelect>>", lambda _e: self._on_thread_selected())
 
         chat_box = ttk.LabelFrame(right, text="Chat History", padding=8)
-        chat_box.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        chat_box.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
         chat_box.rowconfigure(0, weight=1)
         chat_box.columnconfigure(0, weight=1)
         self.chat_history = ScrolledText(chat_box, height=18)
         self.chat_history.grid(row=0, column=0, sticky="nsew")
+        self.chat_history.configure(wrap="word", state="normal")
+        self.chat_history.tag_configure("rx_head", foreground="#25526e", font=("Segoe UI", 9, "bold"))
+        self.chat_history.tag_configure("rx_body", foreground="#0d2b3e", background="#dff1ff", lmargin1=8, lmargin2=8)
+        self.chat_history.tag_configure("tx_head", foreground="#1a5a2a", font=("Segoe UI", 9, "bold"), justify="right")
+        self.chat_history.tag_configure("tx_body", foreground="#13361d", background="#e7f9e4", lmargin1=70, lmargin2=70, justify="right")
+        self.chat_history.tag_configure("sys", foreground="#6b5f1f", background="#fff7d0", lmargin1=8, lmargin2=8)
 
         compose = ttk.LabelFrame(right, text="Compose", padding=8)
-        compose.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        compose.grid(row=3, column=0, sticky="ew", pady=(8, 0))
         compose.columnconfigure(0, weight=1)
         ttk.Entry(compose, textvariable=self.chat_compose_var).grid(row=0, column=0, sticky="ew")
         ttk.Button(compose, text="Send To Selected Contact", command=self.send_chat_to_selected_contact).grid(
@@ -617,35 +637,166 @@ class HamHatControlApp(tk.Tk):
             for g in sorted(self._chat_groups.keys()):
                 members = ",".join(self._chat_groups[g][:6])
                 self.groups_list.insert("end", f"{g}: {members}")
+        self._refresh_thread_list()
 
-    def _append_chat_message(self, direction: str, src: str, dst: str, text: str, mid: str = "") -> None:
+    def _append_chat_message(
+        self,
+        direction: str,
+        src: str,
+        dst: str,
+        text: str,
+        mid: str = "",
+        thread: str = "",
+        group: str = "",
+        remote_copy: str = "",
+    ) -> None:
         ts = datetime.now().strftime("%H:%M:%S")
-        item = {"ts": ts, "dir": direction, "src": src, "dst": dst, "text": text, "id": mid}
+        t = thread.strip().upper() or self._infer_thread_key(src, dst, text)
+        item = {
+            "ts": ts,
+            "dir": direction,
+            "src": src,
+            "dst": dst,
+            "text": text,
+            "id": mid,
+            "thread": t,
+            "group": group.strip().upper(),
+            "remote_copy": remote_copy.strip().upper(),
+        }
         self._chat_messages.append(item)
         if len(self._chat_messages) > 800:
             self._chat_messages = self._chat_messages[-500:]
+        if direction == "RX" and t and t != self._active_thread_key:
+            self._chat_threads_unread[t] = self._chat_threads_unread.get(t, 0) + 1
+        self._refresh_thread_list()
         self._render_chat_history()
 
     def _render_chat_history(self) -> None:
         if not hasattr(self, "chat_history"):
             return
-        target = self.chat_target_var.get().strip().upper()
+        target = (self._active_thread_key or self.chat_target_var.get().strip().upper())
         self.chat_history.delete("1.0", "end")
         for m in self._chat_messages:
             if target:
-                if target.startswith("GROUP:"):
-                    g = target.split(":", 1)[1].strip()
-                    members = set(self._chat_groups.get(g, []))
-                    if m["src"] not in members and m["dst"] not in members:
-                        continue
-                else:
-                    if m["src"] != target and m["dst"] != target:
-                        continue
-            line = f"[{m['ts']}] {m['dir']} {m['src']} -> {m['dst']}: {m['text']}"
-            if m["id"]:
-                line += f" {{{m['id']}}}"
-            self.chat_history.insert("end", line + "\n")
+                if m.get("thread", "") != target:
+                    continue
+            ts = m["ts"]
+            src = m["src"]
+            text = m["text"]
+            msg_id = m.get("id", "")
+            if m["dir"] == "TX":
+                head = f"{ts}  You -> {m.get('remote_copy') or m['dst']}\n"
+                self.chat_history.insert("end", head, "tx_head")
+                self.chat_history.insert("end", f"{text}\n", "tx_body")
+            elif m["dir"] == "SYS":
+                self.chat_history.insert("end", f"{ts}  {text}\n", "sys")
+            else:
+                head = f"{ts}  {src}\n"
+                self.chat_history.insert("end", head, "rx_head")
+                self.chat_history.insert("end", f"{text}\n", "rx_body")
+            if msg_id:
+                self.chat_history.insert("end", f"id:{msg_id}\n", "sys")
+            self.chat_history.insert("end", "\n")
         self.chat_history.see("end")
+
+    def _refresh_thread_list(self) -> None:
+        if not hasattr(self, "chat_threads_list"):
+            return
+        last_by_thread: dict[str, dict[str, str]] = {}
+        for msg in self._chat_messages:
+            t = msg.get("thread", "")
+            if t:
+                last_by_thread[t] = msg
+        for c in self._chat_contacts:
+            key = c.upper()
+            if key and key not in last_by_thread:
+                last_by_thread[key] = {"thread": key, "text": "(new conversation)", "ts": "--:--:--"}
+        for g in self._chat_groups:
+            key = f"GROUP:{g.upper()}"
+            if key not in last_by_thread:
+                last_by_thread[key] = {"thread": key, "text": "(group)", "ts": "--:--:--"}
+        ordered = sorted(last_by_thread.values(), key=lambda m: m.get("ts", "00:00:00"), reverse=True)
+        self.chat_threads_list.delete(0, "end")
+        for row in ordered:
+            thread = row.get("thread", "")
+            preview = row.get("text", "").replace("\n", " ").strip()
+            if len(preview) > 36:
+                preview = preview[:33] + "..."
+            unread = self._chat_threads_unread.get(thread, 0)
+            badge = f" ({unread})" if unread > 0 else ""
+            label = f"{thread}{badge}  |  {preview}"
+            self.chat_threads_list.insert("end", label)
+        if self._active_thread_key:
+            for idx in range(self.chat_threads_list.size()):
+                token = self.chat_threads_list.get(idx).split("|", 1)[0].strip()
+                token = token.rsplit("(", 1)[0].strip()
+                if token == self._active_thread_key:
+                    self.chat_threads_list.selection_clear(0, "end")
+                    self.chat_threads_list.selection_set(idx)
+                    self.chat_threads_list.see(idx)
+                    break
+
+    def _on_thread_selected(self) -> None:
+        if not hasattr(self, "chat_threads_list"):
+            return
+        sel = self.chat_threads_list.curselection()
+        if not sel:
+            return
+        raw = self.chat_threads_list.get(sel[0])
+        thread = raw.split("|", 1)[0].strip()
+        thread = thread.rsplit("(", 1)[0].strip()
+        self._set_active_thread(thread)
+
+    def _set_active_thread(self, thread: str) -> None:
+        t = thread.strip().upper()
+        if not t:
+            return
+        self._active_thread_key = t
+        self.chat_target_var.set(t)
+        self._chat_threads_unread[t] = 0
+        self._refresh_thread_list()
+        self._render_chat_history()
+
+    def _infer_thread_key(self, src: str, dst: str, text: str) -> str:
+        src_u = self._norm_call(src)
+        dst_u = self._norm_call(dst)
+        g = parse_group_wire_text(text or "")
+        if g:
+            return f"GROUP:{g[0]}"
+        local_calls = self._call_variants(self.aprs_source_var.get())
+        if dst_u in local_calls:
+            return src_u
+        if src_u in local_calls:
+            return dst_u
+        return src_u or dst_u
+
+    def _split_direct_text(self, text: str) -> list[str]:
+        chunks = split_aprs_text_chunks(text, APRS_MESSAGE_TEXT_MAX)
+        if len(chunks) <= 1:
+            return chunks
+        out: list[str] = []
+        total = len(chunks)
+        for idx, chunk in enumerate(chunks, start=1):
+            prefix = f"[{idx}/{total}] "
+            max_len = APRS_MESSAGE_TEXT_MAX - len(prefix)
+            out.append(prefix + chunk[:max(1, max_len)])
+        return out
+
+    def _split_group_wire_chunks(self, group: str, text: str) -> list[str]:
+        base = build_group_wire_text(group, "")
+        max_body = APRS_MESSAGE_TEXT_MAX - len(base)
+        if max_body < 8:
+            raise ValueError("Group name is too long for APRS messaging")
+        body_chunks = split_aprs_text_chunks(text, max_body)
+        if len(body_chunks) <= 1:
+            return [build_group_wire_text(group, body_chunks[0] if body_chunks else text)]
+        total = len(body_chunks)
+        out: list[str] = []
+        for idx, body in enumerate(body_chunks, start=1):
+            envelope = build_group_wire_text(group, "", part=idx, total=total)
+            max_wire = APRS_MESSAGE_TEXT_MAX - len(envelope)
+            out.append(build_group_wire_text(group, body[:max(1, max_wire)], part=idx, total=total))
+        return out
 
     def _note_heard_station(self, call: str) -> None:
         c = self._norm_call(call)
@@ -724,25 +875,28 @@ class HamHatControlApp(tk.Tk):
         c = self._selected_contact()
         if not c:
             return
-        self.chat_target_var.set(c)
-        self._render_chat_history()
+        self._set_active_thread(c)
 
     def _on_group_selected(self) -> None:
         g = self._selected_group_name()
         if not g:
             return
-        self.chat_target_var.set(f"GROUP:{g}")
+        self._set_active_thread(f"GROUP:{g}")
         members = ",".join(self._chat_groups.get(g, []))
         self.chat_group_name_var.set(g)
         self.chat_group_members_var.set(members)
-        self._render_chat_history()
 
-    def _send_chat_payload_to(self, to_call: str, text: str) -> None:
-        msg_id = self._make_message_id()
-        payload = build_aprs_message_payload(addressee=to_call, text=text, message_id=msg_id)
-        self._send_aprs_payload(payload, "chat")
+    def _send_chat_payload_to(self, to_call: str, text: str, thread: str, remote_copy: str = "") -> None:
         src = self.aprs_source_var.get().strip().upper()
-        self._append_chat_message("TX", src, to_call, text, msg_id)
+        chunks = self._split_direct_text(text)
+        if not chunks:
+            raise ValueError("Message text is required")
+        for chunk in chunks:
+            msg_id = self._make_message_id()
+            payload = build_aprs_message_payload(addressee=to_call, text=chunk, message_id=msg_id)
+            self._send_aprs_payload(payload, "chat")
+            self._append_chat_message("TX", src, to_call, chunk, msg_id, thread=thread, remote_copy=remote_copy)
+        self._set_active_thread(thread)
 
     def send_chat_to_selected_contact(self) -> None:
         to_call = self._selected_contact()
@@ -753,7 +907,7 @@ class HamHatControlApp(tk.Tk):
         if not text:
             messagebox.showerror("Comms", "Message text is required")
             return
-        self._send_chat_payload_to(to_call, text)
+        self._send_chat_payload_to(to_call, text, thread=to_call)
         self.chat_compose_var.set("")
 
     def send_chat_to_selected_group(self) -> None:
@@ -769,11 +923,26 @@ class HamHatControlApp(tk.Tk):
         if not members:
             messagebox.showerror("Comms", "Selected group has no members")
             return
+        wire_chunks = self._split_group_wire_chunks(g, text)
+        src = self.aprs_source_var.get().strip().upper()
         for m in members:
-            self._send_chat_payload_to(m, f"[{g}] {text}")
+            for chunk in wire_chunks:
+                msg_id = self._make_message_id()
+                payload = build_aprs_message_payload(addressee=m, text=chunk, message_id=msg_id)
+                self._send_aprs_payload(payload, "chat_group")
+        display = text if len(wire_chunks) == 1 else f"{text} ({len(wire_chunks)} parts)"
+        self._append_chat_message(
+            "TX",
+            src,
+            f"GROUP:{g}",
+            display,
+            "",
+            thread=f"GROUP:{g}",
+            group=g,
+            remote_copy=f"{len(members)} recipients",
+        )
         self.chat_compose_var.set("")
-        self.chat_target_var.set(f"GROUP:{g}")
-        self._render_chat_history()
+        self._set_active_thread(f"GROUP:{g}")
 
     def reply_last_sender(self) -> None:
         c = self._norm_call(self._last_direct_sender)
@@ -783,8 +952,7 @@ class HamHatControlApp(tk.Tk):
         if c not in self._chat_contacts:
             self._chat_contacts.append(c)
         self._refresh_contacts_ui()
-        self.chat_target_var.set(c)
-        self._render_chat_history()
+        self._set_active_thread(c)
 
     def log(self, msg: str) -> None:
         self.log_text.insert("end", msg + "\n")
@@ -1383,13 +1551,19 @@ class HamHatControlApp(tk.Tk):
                 elif kind == "heard_station":
                     self._note_heard_station(a)
                 elif kind == "chat_msg":
-                    payload = (b or "").split("|", 4)
-                    if len(payload) >= 4:
-                        src = payload[0]
-                        dst = payload[1]
-                        text = payload[2]
-                        mid = payload[3] if len(payload) > 3 else ""
-                        self._append_chat_message(a, src, dst, text, mid)
+                    try:
+                        data = json.loads(b or "{}")
+                    except Exception:
+                        data = {}
+                    src = str(data.get("src", ""))
+                    dst = str(data.get("dst", ""))
+                    text = str(data.get("text", ""))
+                    mid = str(data.get("id", ""))
+                    thread = str(data.get("thread", ""))
+                    group = str(data.get("group", ""))
+                    remote_copy = str(data.get("remote_copy", ""))
+                    if src and dst:
+                        self._append_chat_message(a, src, dst, text, mid, thread=thread, group=group, remote_copy=remote_copy)
                 elif kind == "auto_ack":
                     try:
                         ack_payload = build_aprs_ack_payload(addressee=a, message_id=(b or ""))
@@ -1425,9 +1599,27 @@ class HamHatControlApp(tk.Tk):
     def _queue_heard_station(self, call: str) -> None:
         self._ui_queue.put(("heard_station", call, None))
 
-    def _queue_chat_message(self, direction: str, src: str, dst: str, text: str, mid: str = "") -> None:
-        safe_text = text.replace("|", "/")
-        self._ui_queue.put(("chat_msg", direction, f"{src}|{dst}|{safe_text}|{mid}"))
+    def _queue_chat_message(
+        self,
+        direction: str,
+        src: str,
+        dst: str,
+        text: str,
+        mid: str = "",
+        thread: str = "",
+        group: str = "",
+        remote_copy: str = "",
+    ) -> None:
+        data = {
+            "src": src,
+            "dst": dst,
+            "text": text,
+            "id": mid,
+            "thread": thread,
+            "group": group,
+            "remote_copy": remote_copy,
+        }
+        self._ui_queue.put(("chat_msg", direction, json.dumps(data)))
 
     @staticmethod
     def _wf_color(v: int) -> str:
@@ -1582,18 +1774,39 @@ class HamHatControlApp(tk.Tk):
         if not parsed:
             return
         addressee, msg_text, msg_id = parsed
-        self._queue_chat_message("RX", pkt_source, addressee, msg_text, msg_id or "")
         local_calls = self._call_variants(self.aprs_source_var.get())
-        if addressee not in local_calls:
-            return
-        self._last_direct_sender = pkt_source
-
         if msg_text.lower().startswith("ack"):
             ack_id = msg_text[3:].strip()[:5]
             if ack_id:
                 self._note_ack(ack_id)
                 self._aprs_log(f"ACK received from {pkt_source} for {ack_id}")
             return
+
+        group_wire = parse_group_wire_text(msg_text)
+        thread = self._infer_thread_key(pkt_source, addressee, msg_text)
+        display_text = msg_text
+        group_name = ""
+        if group_wire:
+            group_name, body, part, total = group_wire
+            if part and total:
+                display_text = f"[{part}/{total}] {body}"
+            else:
+                display_text = body
+            thread = f"GROUP:{group_name}"
+
+        self._queue_chat_message(
+            "RX",
+            pkt_source,
+            addressee,
+            display_text,
+            msg_id or "",
+            thread=thread,
+            group=group_name,
+        )
+
+        if addressee not in local_calls:
+            return
+        self._last_direct_sender = pkt_source
 
         if not msg_id:
             return
@@ -1932,7 +2145,7 @@ class HamHatControlApp(tk.Tk):
 
     @staticmethod
     def _play_wav_on_device_compatible(path: Path, device_index: int) -> None:
-        # Use device-native sample rate/channel layout so announce sweep works across host APIs.
+        # Use mono playback at device-native rate to match SA818 USB mono audio.
         with wave.open(str(path), "rb") as wav:
             channels = wav.getnchannels()
             width = wav.getsampwidth()
@@ -1957,14 +2170,9 @@ class HamHatControlApp(tk.Tk):
             xq = np.linspace(0.0, 1.0, dst_n, endpoint=False)
             mono_f = np.interp(xq, xp, mono_f).astype(np.float32)
 
-        stereo = np.column_stack(
-            (
-                np.clip(mono_f, -32768.0, 32767.0).astype(np.int16),
-                np.clip(mono_f, -32768.0, 32767.0).astype(np.int16),
-            )
-        )
+        mono_i16 = np.clip(mono_f, -32768.0, 32767.0).astype(np.int16)
         sd.stop()
-        sd.play(stereo, samplerate=dst_rate, device=device_index, blocking=True)
+        sd.play(mono_i16, samplerate=dst_rate, device=device_index, blocking=True)
 
     def tx_channel_announce_sweep(self) -> None:
         if platform.system().lower() != "windows":
