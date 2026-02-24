@@ -13,7 +13,7 @@ APP_DIR = Path(__file__).resolve().parents[1] / "app"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from audio_tools import play_wav_blocking  # noqa: E402
+from audio_tools import play_wav_blocking_compatible  # noqa: E402
 from sa818_client import RadioConfig, SA818Client  # noqa: E402
 
 
@@ -69,7 +69,7 @@ def main() -> int:
         client.set_ptt(True, line=args.ptt_line, active_high=args.ptt_active_high)
         time.sleep(max(0.0, args.ptt_pre_ms / 1000.0))
         try:
-            play_wav_blocking(wav, device_index=args.output_device)
+            play_wav_blocking_compatible(wav, device_index=args.output_device)
         finally:
             time.sleep(max(0.0, args.ptt_post_ms / 1000.0))
             client.set_ptt(False, line=args.ptt_line, active_high=args.ptt_active_high)

@@ -27,10 +27,12 @@ from aprs_modem import (
     APRS_MESSAGE_TEXT_MAX,
     build_aprs_ack_payload,
     build_group_wire_text,
+    build_intro_wire_text,
     build_aprs_message_payload,
     build_aprs_position_payload,
     decode_ax25_from_samples,
     decode_ax25_from_wav,
+    parse_intro_wire_text,
     parse_aprs_message_info,
     parse_group_wire_text,
     parse_aprs_position_info,
@@ -40,7 +42,6 @@ from audio_tools import (
     capture_samples,
     list_input_devices,
     list_output_devices,
-    play_wav_blocking,
     play_wav_blocking_compatible,
     record_wav,
     stop_playback,
@@ -54,12 +55,22 @@ from sa818_client import RadioConfig, SA818Client, SA818Error
 APP_DIR = Path(__file__).resolve().parents[1]
 PROFILE_PATH = APP_DIR / "profiles" / "last_profile.json"
 AUDIO_DIR = APP_DIR / "audio_out"
+VERSION_PATH = APP_DIR / "VERSION"
+
+
+def _load_app_version() -> str:
+    try:
+        txt = VERSION_PATH.read_text(encoding="utf-8").strip()
+        return txt or "0.0.0-dev"
+    except Exception:
+        return "0.0.0-dev"
 
 
 class HamHatControlApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("uConsole HAM HAT Control Center")
+        self.app_version = _load_app_version()
+        self.title(f"uConsole HAM HAT Control Center  |  v{self.app_version}")
         sw = max(900, int(self.winfo_screenwidth()))
         sh = max(620, int(self.winfo_screenheight()))
         ww = max(900, min(1280, sw - 80))
@@ -71,6 +82,7 @@ class HamHatControlApp(tk.Tk):
 
         self._vars()
         self._build_ui()
+        self.log(f"App version: v{self.app_version}")
         self.refresh_ports()
         self.refresh_audio_devices()
         self.refresh_input_devices()
@@ -103,12 +115,12 @@ class HamHatControlApp(tk.Tk):
         self.offline_bootstrap_var = tk.BooleanVar(value=False)
         self.test_tone_freq_var = tk.StringVar(value="1200")
         self.test_tone_duration_var = tk.StringVar(value="2.0")
-        self.aprs_source_var = tk.StringVar(value="N0CALL-9")
+        self.aprs_source_var = tk.StringVar(value="VA7AYG-00")
         self.aprs_dest_var = tk.StringVar(value="APRS")
         self.aprs_path_var = tk.StringVar(value="WIDE1-1")
         self.aprs_message_var = tk.StringVar(value="uConsole HAM HAT test")
         self.audio_device_var = tk.StringVar(value="Default")
-        self.aprs_msg_to_var = tk.StringVar(value="N0CALL")
+        self.aprs_msg_to_var = tk.StringVar(value="VA7AYG-01")
         self.aprs_msg_text_var = tk.StringVar(value="hello from uConsole")
         self.aprs_msg_id_var = tk.StringVar(value="")
         self.aprs_reliable_var = tk.BooleanVar(value=False)
@@ -157,6 +169,7 @@ class HamHatControlApp(tk.Tk):
         self.output_level_var = tk.DoubleVar(value=0.0)
         self._visualizer_running = False
         self._visualizer_thread: threading.Thread | None = None
+        self._visualizer_error_logged = False
         self._tx_active = False
         self._tx_level_hold = 0.0
         self._waterfall_width = 320
@@ -172,11 +185,13 @@ class HamHatControlApp(tk.Tk):
         self._chat_threads_unread: dict[str, int] = {}
         self._active_thread_key = ""
         self._last_direct_sender = ""
+        self._intro_seen: set[str] = set()
         self.chat_new_contact_var = tk.StringVar(value="")
         self.chat_group_name_var = tk.StringVar(value="")
         self.chat_group_members_var = tk.StringVar(value="")
         self.chat_compose_var = tk.StringVar(value="")
         self.chat_target_var = tk.StringVar(value="")
+        self.chat_intro_note_var = tk.StringVar(value="uConsole HAM HAT online")
 
     def _build_ui(self) -> None:
         root_pane = ttk.Panedwindow(self, orient="vertical")
@@ -193,6 +208,10 @@ class HamHatControlApp(tk.Tk):
         spectrum_frame = ttk.Frame(top_pane)
         top_pane.add(notebook_frame, weight=5)
         top_pane.add(spectrum_frame, weight=2)
+
+        version_row = ttk.Frame(notebook_frame)
+        version_row.pack(fill="x", padx=6, pady=(4, 0))
+        ttk.Label(version_row, text=f"Version v{self.app_version}").pack(side="right")
 
         notebook = ttk.Notebook(notebook_frame)
         notebook.pack(fill="both", expand=True)
@@ -376,6 +395,14 @@ class HamHatControlApp(tk.Tk):
         identity = ttk.LabelFrame(left, text="APRS Identity + TX Tuning", padding=8)
         identity.pack(fill="x")
         self._row(identity, "Source", ttk.Entry(identity, textvariable=self.aprs_source_var, width=16), 0)
+        preset_row = ttk.Frame(identity)
+        preset_row.grid(row=0, column=2, sticky="w", padx=(8, 0))
+        ttk.Button(preset_row, text="Use VA7AYG-00", command=lambda: self.apply_callsign_preset("VA7AYG-00", "VA7AYG-01")).pack(
+            side="left"
+        )
+        ttk.Button(preset_row, text="Use VA7AYG-01", command=lambda: self.apply_callsign_preset("VA7AYG-01", "VA7AYG-00")).pack(
+            side="left", padx=(6, 0)
+        )
         self._row(identity, "Destination", ttk.Entry(identity, textvariable=self.aprs_dest_var, width=16), 1)
         self._row(identity, "Path", ttk.Entry(identity, textvariable=self.aprs_path_var, width=20), 2)
         self._row(identity, "TX Gain (0.05-0.40)", ttk.Entry(identity, textvariable=self.aprs_tx_gain_var, width=10), 3)
@@ -535,7 +562,7 @@ class HamHatControlApp(tk.Tk):
         right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         left.columnconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
+        right.rowconfigure(2, weight=1)
 
         contacts = ttk.LabelFrame(left, text="Contacts", padding=8)
         contacts.pack(fill="both", expand=True)
@@ -612,6 +639,13 @@ class HamHatControlApp(tk.Tk):
         )
         ttk.Button(compose, text="Send To Group", command=self.send_chat_to_selected_group).grid(
             row=0, column=2, padx=(6, 0)
+        )
+        intro = ttk.LabelFrame(right, text="Discovery", padding=8)
+        intro.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        intro.columnconfigure(0, weight=1)
+        ttk.Entry(intro, textvariable=self.chat_intro_note_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(intro, text="Broadcast Intro + Location", command=self.send_intro_packet).grid(
+            row=0, column=1, padx=(6, 0)
         )
 
     @staticmethod
@@ -810,14 +844,20 @@ class HamHatControlApp(tk.Tk):
             self._heard_stations = self._heard_stations[-200:]
         self._refresh_contacts_ui()
 
-    def add_contact(self) -> None:
-        c = self._norm_call(self.chat_new_contact_var.get())
+    def _ensure_contact(self, call: str) -> None:
+        c = self._norm_call(call)
         if not c:
             return
         if c not in self._chat_contacts:
             self._chat_contacts.append(c)
-        self.chat_new_contact_var.set("")
         self._refresh_contacts_ui()
+
+    def add_contact(self) -> None:
+        c = self._norm_call(self.chat_new_contact_var.get())
+        if not c:
+            return
+        self._ensure_contact(c)
+        self.chat_new_contact_var.set("")
 
     def remove_selected_contact(self) -> None:
         if not hasattr(self, "contacts_list"):
@@ -836,9 +876,7 @@ class HamHatControlApp(tk.Tk):
         if not sel:
             return
         c = self.heard_list.get(sel[0]).strip().upper()
-        if c and c not in self._chat_contacts:
-            self._chat_contacts.append(c)
-        self._refresh_contacts_ui()
+        self._ensure_contact(c)
 
     def save_group_from_fields(self) -> None:
         name = self.chat_group_name_var.get().strip().upper()
@@ -910,6 +948,29 @@ class HamHatControlApp(tk.Tk):
             return
         self._send_chat_payload_to(to_call, text, thread=to_call)
         self.chat_compose_var.set("")
+
+    def send_intro_packet(self) -> None:
+        try:
+            call = self.aprs_source_var.get().strip().upper()
+            lat = float(self.aprs_lat_var.get().strip())
+            lon = float(self.aprs_lon_var.get().strip())
+            note = self.chat_intro_note_var.get().strip()
+            wire = build_intro_wire_text(call, lat, lon, note=note)
+            # Broadcast intro as an APRS message to QST so all peers can discover.
+            payload = build_aprs_message_payload(addressee="QST", text=wire, message_id=self._make_message_id())
+            self._send_aprs_payload(payload, "intro")
+            self._append_chat_message(
+                "SYS",
+                call,
+                "QST",
+                f"Intro broadcast: {call} @ {lat:.5f},{lon:.5f} {note}".strip(),
+                thread="SYSTEM",
+            )
+            self._add_aprs_map_point(lat, lon, f"TX {call} INTRO")
+            self._ensure_contact(call)
+            self._set_active_thread("SYSTEM")
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Intro", str(exc))
 
     def send_chat_to_selected_group(self) -> None:
         g = self._selected_group_name()
@@ -1018,6 +1079,12 @@ class HamHatControlApp(tk.Tk):
         return token
 
     @staticmethod
+    def _normalize_audio_name(name: str) -> str:
+        # Normalize across legacy saved values like "... [Windows WDM-KS]".
+        base = re.sub(r"\s*\[[^]]+\]\s*$", "", name.strip(), flags=re.IGNORECASE)
+        return " ".join(base.lower().split())
+
+    @staticmethod
     def _usb_audio_token(name: str) -> str:
         m = re.search(r"\(([^)]*usb audio device[^)]*)\)", name, flags=re.IGNORECASE)
         if m:
@@ -1027,20 +1094,20 @@ class HamHatControlApp(tk.Tk):
         return ""
 
     def _find_output_entry_by_name(self, name_hint: str) -> str | None:
-        hint = name_hint.strip().lower()
+        hint = self._normalize_audio_name(name_hint)
         if not hint:
             return None
         for entry in self.audio_device_combo["values"]:
-            if self._entry_name(str(entry)).lower() == hint:
+            if self._normalize_audio_name(self._entry_name(str(entry))) == hint:
                 return str(entry)
         return None
 
     def _find_input_entry_by_name(self, name_hint: str) -> str | None:
-        hint = name_hint.strip().lower()
+        hint = self._normalize_audio_name(name_hint)
         if not hint or not hasattr(self, "aprs_rx_input_combo"):
             return None
         for entry in self.aprs_rx_input_combo["values"]:
-            if self._entry_name(str(entry)).lower() == hint:
+            if self._normalize_audio_name(self._entry_name(str(entry))) == hint:
                 return str(entry)
         return None
 
@@ -1306,7 +1373,7 @@ class HamHatControlApp(tk.Tk):
 
                 self._tx_level_hold = self._estimate_wav_level(wav_path)
                 self._tx_active = True
-                play_wav_blocking(wav_path, device_index=device_idx)
+                self._play_wav_on_device_compatible(wav_path, device_idx)
                 self._tx_active = False
 
                 if ptt_used and post_s > 0:
@@ -1598,6 +1665,8 @@ class HamHatControlApp(tk.Tk):
                     self._push_waterfall_row(a)
                 elif kind == "heard_station":
                     self._note_heard_station(a)
+                elif kind == "auto_contact":
+                    self._ensure_contact(a)
                 elif kind == "chat_msg":
                     try:
                         data = json.loads(b or "{}")
@@ -1646,6 +1715,9 @@ class HamHatControlApp(tk.Tk):
 
     def _queue_heard_station(self, call: str) -> None:
         self._ui_queue.put(("heard_station", call, None))
+
+    def _queue_auto_contact(self, call: str) -> None:
+        self._ui_queue.put(("auto_contact", call, None))
 
     def _queue_chat_message(
         self,
@@ -1741,9 +1813,11 @@ class HamHatControlApp(tk.Tk):
         if self._visualizer_running:
             return
         self._visualizer_running = True
+        self._visualizer_error_logged = False
 
         def worker() -> None:
             out_level = 0.0
+            poll_s = 0.28 if platform.system().lower() == "windows" else 0.12
             while self._visualizer_running:
                 try:
                     if self._tx_active:
@@ -1755,14 +1829,17 @@ class HamHatControlApp(tk.Tk):
                     if self._audio_lock.acquire(timeout=0.02):
                         try:
                             dev = self._selected_input_device()
-                            rate, mono = capture_samples(seconds=0.12, device_index=dev)
+                            rate, mono = self._capture_samples_compatible(seconds=poll_s, device_index=dev)
                         finally:
                             self._audio_lock.release()
                         in_level = min(1.0, self._level_from_samples(mono) * 8.0)
                         self._queue_input_level(in_level)
                         self._queue_waterfall_row(self._spectrum_row_from_samples(rate, mono))
-                    sleep(0.12)
-                except Exception:
+                    sleep(poll_s)
+                except Exception as exc:
+                    if not self._visualizer_error_logged:
+                        self._queue_log(f"Visualizer capture fallback error: {exc}")
+                        self._visualizer_error_logged = True
                     sleep(0.2)
 
         self._visualizer_thread = threading.Thread(target=worker, daemon=True)
@@ -1823,6 +1900,28 @@ class HamHatControlApp(tk.Tk):
             return
         addressee, msg_text, msg_id = parsed
         local_calls = self._call_variants(self.aprs_source_var.get())
+        intro = parse_intro_wire_text(msg_text)
+        if intro:
+            intro_call, lat_i, lon_i, note_i = intro
+            # Prefer on-air packet source as ground truth for contact identity.
+            src_call = self._norm_call(pkt_source) or intro_call
+            key = f"{src_call}|{lat_i:.5f}|{lon_i:.5f}|{note_i}"
+            if key not in self._intro_seen:
+                self._intro_seen.add(key)
+                self._queue_auto_contact(src_call)
+                label = f"{src_call} INTRO"
+                if note_i:
+                    label = f"{src_call} {note_i[:14]}"
+                self._queue_map_point(lat_i, lon_i, label)
+                note_suffix = f" - {note_i}" if note_i else ""
+                self._queue_chat_message(
+                    "SYS",
+                    src_call,
+                    "QST",
+                    f"Intro from {src_call} @ {lat_i:.5f},{lon_i:.5f}{note_suffix}",
+                    "",
+                    thread="SYSTEM",
+                )
         if msg_text.lower().startswith("ack"):
             ack_id = msg_text[3:].strip()[:5]
             if ack_id:
@@ -1988,7 +2087,7 @@ class HamHatControlApp(tk.Tk):
                 sleep(max(0.0, pre_ms / 1000.0))
                 self._tx_level_hold = self._estimate_wav_level(wav_path)
                 self._tx_active = True
-                play_wav_blocking(wav_path, device_index=out_dev)
+                self._play_wav_on_device_compatible(wav_path, out_dev)
             finally:
                 self._tx_active = False
                 sleep(max(0.0, post_ms / 1000.0))
@@ -2118,7 +2217,7 @@ class HamHatControlApp(tk.Tk):
                                         sleep(pre_s)
                                     self._tx_level_hold = self._estimate_wav_level(tx_wav)
                                     self._tx_active = True
-                                    play_wav_blocking(tx_wav, device_index=out_idx)
+                                    self._play_wav_on_device_compatible(tx_wav, out_idx)
                                 finally:
                                     self._tx_active = False
                                     if post_s > 0:
@@ -2443,6 +2542,12 @@ class HamHatControlApp(tk.Tk):
             self._aprs_log(f"Send APRS position failed: {exc}")
             messagebox.showerror("APRS TX Error", str(exc))
 
+    def apply_callsign_preset(self, source: str, peer: str) -> None:
+        self.aprs_source_var.set(source.strip().upper())
+        if self.aprs_msg_to_var.get().strip().upper() in {"", "N0CALL", "N0CALL-9", "VA7AYG-00", "VA7AYG-01"}:
+            self.aprs_msg_to_var.set(peer.strip().upper())
+        self.log(f"Callsign preset applied: source={self.aprs_source_var.get()} peer={self.aprs_msg_to_var.get()}")
+
     def receive_aprs_capture(self) -> None:
         if platform.system().lower() != "windows":
             messagebox.showerror("APRS RX", "APRS RX capture is currently implemented for Windows only")
@@ -2604,6 +2709,7 @@ class HamHatControlApp(tk.Tk):
             "ptt_post_ms": self.ptt_post_ms_var.get(),
             "chat_contacts": self._chat_contacts,
             "chat_groups": self._chat_groups,
+            "chat_intro_note": self.chat_intro_note_var.get(),
         }
         PROFILE_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
         self.log(f"Profile saved: {PROFILE_PATH}")
@@ -2628,11 +2734,11 @@ class HamHatControlApp(tk.Tk):
         self.volume_var.set(int(data.get("volume", 8)))
         self.test_tone_freq_var.set(data.get("test_tone_freq", "1200"))
         self.test_tone_duration_var.set(data.get("test_tone_duration", "2.0"))
-        self.aprs_source_var.set(data.get("aprs_source", "N0CALL-9"))
+        self.aprs_source_var.set(data.get("aprs_source", "VA7AYG-00"))
         self.aprs_dest_var.set(data.get("aprs_dest", "APRS"))
         self.aprs_path_var.set(data.get("aprs_path", "WIDE1-1"))
         self.aprs_message_var.set(data.get("aprs_message", "uConsole HAM HAT test"))
-        self.aprs_msg_to_var.set(data.get("aprs_msg_to", "N0CALL"))
+        self.aprs_msg_to_var.set(data.get("aprs_msg_to", "VA7AYG-01"))
         self.aprs_msg_text_var.set(data.get("aprs_msg_text", "hello from uConsole"))
         self.aprs_msg_id_var.set(data.get("aprs_msg_id", ""))
         self.aprs_reliable_var.set(bool(data.get("aprs_reliable", False)))
@@ -2667,6 +2773,7 @@ class HamHatControlApp(tk.Tk):
                 for k, v in raw_groups.items()
                 if self._norm_call(k)
             }
+        self.chat_intro_note_var.set(data.get("chat_intro_note", "uConsole HAM HAT online"))
         self._refresh_contacts_ui()
         if self.auto_audio_select_var.get():
             self._auto_select_audio_devices()

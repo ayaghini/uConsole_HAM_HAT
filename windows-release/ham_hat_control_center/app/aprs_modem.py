@@ -14,6 +14,10 @@ import numpy as np
 FLAG_BITS = [0, 1, 1, 1, 1, 1, 1, 0]  # 0x7E, LSB-first
 APRS_MESSAGE_TEXT_MAX = 67
 GROUP_WIRE_RE = re.compile(r"^@GRP/([A-Z0-9_-]{1,16})(?:/([0-9]{1,2})/([0-9]{1,2}))?:(.*)$", flags=re.IGNORECASE)
+INTRO_WIRE_RE = re.compile(
+    r"^@INTRO/([A-Z0-9]{1,6}(?:-[0-9]{1,2})?)/(-?[0-9]{1,2}(?:\.[0-9]+)?)/(-?[0-9]{1,3}(?:\.[0-9]+)?):?(.*)$",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass
@@ -49,6 +53,20 @@ def parse_aprs_message_info(info: str) -> tuple[str, str, str | None] | None:
       (addressee, text, message_id_or_none) or None if not message format.
     """
     if not info.startswith(":") or len(info) < 12:
+        return None
+    try:
+        addressee = info[1:10].strip().upper()
+        if info[10] != ":":
+            return None
+        body = info[11:]
+        msg_id: str | None = None
+        if "{" in body:
+            text, tail = body.rsplit("{", 1)
+            msg_id = tail.strip()[:5] or None
+        else:
+            text = body
+        return addressee, text.strip(), msg_id
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -98,20 +116,31 @@ def parse_group_wire_text(text: str) -> tuple[str, str, int | None, int | None] 
     total = int(m.group(3)) if m.group(3) else None
     body = m.group(4).strip()
     return group, body, part, total
-    try:
-        addressee = info[1:10].strip().upper()
-        if info[10] != ":":
-            return None
-        body = info[11:]
-        msg_id: str | None = None
-        if "{" in body:
-            text, tail = body.rsplit("{", 1)
-            msg_id = tail.strip()[:5] or None
-        else:
-            text = body
-        return addressee, text.strip(), msg_id
-    except Exception:  # noqa: BLE001
+
+
+def build_intro_wire_text(callsign: str, lat: float, lon: float, note: str = "") -> str:
+    call = callsign.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9]{1,6}(?:-[0-9]{1,2})?", call):
+        raise ValueError("Intro callsign must match AX.25 callsign format")
+    if lat < -90.0 or lat > 90.0:
+        raise ValueError("Latitude out of range")
+    if lon < -180.0 or lon > 180.0:
+        raise ValueError("Longitude out of range")
+    body = note.strip()
+    return f"@INTRO/{call}/{lat:.5f}/{lon:.5f}:{body}"
+
+
+def parse_intro_wire_text(text: str) -> tuple[str, float, float, str] | None:
+    m = INTRO_WIRE_RE.match(text.strip())
+    if not m:
         return None
+    call = m.group(1).upper()
+    lat = float(m.group(2))
+    lon = float(m.group(3))
+    note = m.group(4).strip()
+    if lat < -90.0 or lat > 90.0 or lon < -180.0 or lon > 180.0:
+        return None
+    return call, lat, lon, note
 
 
 def parse_aprs_position_info(info: str) -> tuple[float, float, str] | None:
