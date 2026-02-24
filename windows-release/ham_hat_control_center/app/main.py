@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import wave
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from time import sleep
@@ -29,6 +30,7 @@ from aprs_modem import (
     decode_ax25_from_samples,
     decode_ax25_from_wav,
     parse_aprs_message_info,
+    parse_aprs_position_info,
 )
 from audio_tools import (
     capture_samples,
@@ -53,7 +55,12 @@ class HamHatControlApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("uConsole HAM HAT Control Center")
-        self.geometry("980x720")
+        sw = max(900, int(self.winfo_screenwidth()))
+        sh = max(620, int(self.winfo_screenheight()))
+        ww = max(900, min(1280, sw - 80))
+        wh = max(620, min(920, sh - 100))
+        self.geometry(f"{ww}x{wh}")
+        self.minsize(860, 560)
 
         self.client = SA818Client()
 
@@ -65,6 +72,7 @@ class HamHatControlApp(tk.Tk):
         self.load_profile(silent=True)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._drain_ui_queue)
+        self._start_audio_visualizer()
         if self.aprs_rx_auto_var.get():
             self.start_rx_monitor()
 
@@ -133,224 +141,650 @@ class HamHatControlApp(tk.Tk):
         self._ack_condition = threading.Condition()
         self._acked_message_ids: set[str] = set()
         self._seen_direct_message_ids: set[str] = set()
+        self._map_points: list[tuple[float, float, str]] = []
+        self._last_aprs_position: tuple[float, float, str] | None = None
+        self._map_zoom = 1.0
+        self._map_pan_x = 0.0
+        self._map_pan_y = 0.0
+        self._map_drag_last: tuple[int, int] | None = None
+        self._map_pick_radius_px = 8.0
+        self.input_level_var = tk.DoubleVar(value=0.0)
+        self.output_level_var = tk.DoubleVar(value=0.0)
+        self._visualizer_running = False
+        self._visualizer_thread: threading.Thread | None = None
+        self._tx_active = False
+        self._tx_level_hold = 0.0
+        self._waterfall_width = 320
+        self._waterfall_height = 96
+        self._waterfall_target_h = 96
+        self._waterfall_buffer = np.zeros((self._waterfall_height, self._waterfall_width), dtype=np.uint8)
+        self._waterfall_photo: tk.PhotoImage | None = None
+        self._tab_scroll_canvases: list[tk.Canvas] = []
+        self._chat_contacts: list[str] = []
+        self._heard_stations: list[str] = []
+        self._chat_groups: dict[str, list[str]] = {}
+        self._chat_messages: list[dict[str, str]] = []
+        self._last_direct_sender = ""
+        self.chat_new_contact_var = tk.StringVar(value="")
+        self.chat_group_name_var = tk.StringVar(value="")
+        self.chat_group_members_var = tk.StringVar(value="")
+        self.chat_compose_var = tk.StringVar(value="")
+        self.chat_target_var = tk.StringVar(value="")
 
     def _build_ui(self) -> None:
-        top = ttk.Frame(self, padding=10)
-        top.pack(fill="x")
+        root_pane = ttk.Panedwindow(self, orient="vertical")
+        root_pane.pack(fill="both", expand=True, padx=10, pady=(10, 10))
 
-        ttk.Label(top, text="Serial Port:").pack(side="left")
-        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, width=28, state="readonly")
-        self.port_combo.pack(side="left", padx=(6, 6))
+        top_frame = ttk.Frame(root_pane)
+        log_frame = ttk.LabelFrame(root_pane, text="Log", padding=8)
+        root_pane.add(top_frame, weight=6)
+        root_pane.add(log_frame, weight=2)
 
-        ttk.Button(top, text="Refresh", command=self.refresh_ports).pack(side="left")
-        ttk.Button(top, text="Auto Identify SA818", command=self.auto_identify_and_connect).pack(side="left", padx=(8, 0))
-        ttk.Button(top, text="Connect", command=self.connect).pack(side="left", padx=(8, 0))
-        ttk.Button(top, text="Disconnect", command=self.disconnect).pack(side="left", padx=(8, 0))
-        ttk.Button(top, text="Read Version", command=self.read_version).pack(side="left", padx=(8, 0))
+        top_pane = ttk.Panedwindow(top_frame, orient="vertical")
+        top_pane.pack(fill="both", expand=True)
+        notebook_frame = ttk.Frame(top_pane)
+        spectrum_frame = ttk.Frame(top_pane)
+        top_pane.add(notebook_frame, weight=5)
+        top_pane.add(spectrum_frame, weight=2)
 
-        ttk.Label(top, textvariable=self.status_var).pack(side="right")
+        notebook = ttk.Notebook(notebook_frame)
+        notebook.pack(fill="both", expand=True)
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        control_tab = ttk.Frame(notebook, padding=10)
-        aprs_tab = ttk.Frame(notebook, padding=10)
-        setup_tab = ttk.Frame(notebook, padding=10)
-        notebook.add(control_tab, text="Radio Control")
+        main_tab = ttk.Frame(notebook)
+        aprs_tab = ttk.Frame(notebook)
+        comms_tab = ttk.Frame(notebook)
+        setup_tab = ttk.Frame(notebook)
+        notebook.add(main_tab, text="Main")
         notebook.add(aprs_tab, text="APRS")
+        notebook.add(comms_tab, text="Comms")
         notebook.add(setup_tab, text="Setup")
 
-        self._build_control_tab(control_tab)
-        self._build_aprs_tab(aprs_tab)
-        self._build_setup_tab(setup_tab)
+        main_content = self._create_scrollable_tab(main_tab)
+        aprs_content = self._create_scrollable_tab(aprs_tab)
+        comms_content = self._create_scrollable_tab(comms_tab)
+        setup_content = self._create_scrollable_tab(setup_tab)
 
-        log_frame = ttk.LabelFrame(self, text="Log", padding=8)
-        log_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        self.log_text = ScrolledText(log_frame, height=14)
+        self._build_control_tab(main_content)
+        self._build_aprs_tab(aprs_content)
+        self._build_comms_tab(comms_content)
+        self._build_setup_tab(setup_content)
+
+        spectrum = ttk.LabelFrame(spectrum_frame, text="Live Audio Spectrum (All Tabs)", padding=8)
+        spectrum.pack(fill="both", expand=True, pady=(6, 0))
+        spectrum.columnconfigure(1, weight=1)
+        ttk.Label(spectrum, text="Input").grid(row=0, column=0, sticky="w")
+        ttk.Progressbar(spectrum, maximum=1.0, variable=self.input_level_var).grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        ttk.Label(spectrum, text="Output").grid(row=0, column=2, sticky="w")
+        ttk.Progressbar(spectrum, maximum=1.0, variable=self.output_level_var).grid(row=0, column=3, sticky="ew", padx=(8, 0))
+        spectrum.columnconfigure(3, weight=1)
+        self._waterfall_width = 640
+        self._waterfall_buffer = np.zeros((self._waterfall_height, self._waterfall_width), dtype=np.uint8)
+        self.waterfall_canvas = tk.Canvas(
+            spectrum,
+            width=self._waterfall_width,
+            height=self._waterfall_target_h,
+            background="#081018",
+            highlightthickness=1,
+            highlightbackground="#1d3448",
+        )
+        self.waterfall_canvas.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(8, 0))
+        spectrum.rowconfigure(1, weight=1)
+        self.waterfall_canvas.bind("<Configure>", self._on_waterfall_resize)
+        self._waterfall_photo = tk.PhotoImage(width=self._waterfall_width, height=self._waterfall_height)
+        self.waterfall_canvas.create_image(0, 0, image=self._waterfall_photo, anchor="nw")
+
+        self.log_text = ScrolledText(log_frame, height=8)
         self.log_text.pack(fill="both", expand=True)
 
+    def _create_scrollable_tab(self, parent: ttk.Frame) -> ttk.Frame:
+        container = ttk.Frame(parent, padding=0)
+        container.pack(fill="both", expand=True)
+        canvas = tk.Canvas(container, highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+        inner = ttk.Frame(canvas, padding=10)
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def on_inner_config(_e: tk.Event) -> None:  # type: ignore[type-arg]
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def on_canvas_config(_e: tk.Event) -> None:  # type: ignore[type-arg]
+            new_w = canvas.winfo_width()
+            new_h = max(canvas.winfo_height(), inner.winfo_reqheight())
+            canvas.itemconfigure(win, width=new_w, height=new_h)
+
+        def on_mousewheel(e: tk.Event) -> None:  # type: ignore[type-arg]
+            delta = -1 * int(e.delta / 120) if e.delta else 0
+            if delta != 0:
+                canvas.yview_scroll(delta, "units")
+
+        inner.bind("<Configure>", on_inner_config)
+        canvas.bind("<Configure>", on_canvas_config)
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        self._tab_scroll_canvases.append(canvas)
+        return inner
+
+    def _on_waterfall_resize(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        new_w = max(240, int(event.width))
+        new_h = max(64, min(140, int(event.height)))
+        if new_w == self._waterfall_width and new_h == self._waterfall_height:
+            return
+        self._waterfall_width = new_w
+        self._waterfall_height = new_h
+        self._waterfall_buffer = np.zeros((self._waterfall_height, self._waterfall_width), dtype=np.uint8)
+        self._waterfall_photo = tk.PhotoImage(width=self._waterfall_width, height=self._waterfall_height)
+        self.waterfall_canvas.delete("all")
+        self.waterfall_canvas.create_image(0, 0, image=self._waterfall_photo, anchor="nw")
+
     def _build_control_tab(self, parent: ttk.Frame) -> None:
-        left = ttk.Frame(parent)
-        left.pack(side="left", fill="both", expand=True)
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.columnconfigure(2, weight=1)
+        parent.columnconfigure(3, weight=1)
 
-        radio = ttk.LabelFrame(left, text="Radio", padding=10)
-        radio.pack(fill="x")
+        conn = ttk.LabelFrame(parent, text="Connection", padding=8)
+        conn.grid(row=0, column=0, columnspan=4, sticky="ew")
+        conn.columnconfigure(1, weight=1)
+        ttk.Label(conn, text="Serial Port").grid(row=0, column=0, sticky="w", pady=3)
+        self.port_combo = ttk.Combobox(conn, textvariable=self.port_var, width=22, state="readonly")
+        self.port_combo.grid(row=0, column=1, sticky="ew", padx=(6, 6), pady=3)
+        ttk.Label(conn, textvariable=self.status_var).grid(row=0, column=2, sticky="e")
 
-        self._row(radio, "Frequency (MHz)", ttk.Entry(radio, textvariable=self.frequency_var, width=16), 0)
-        self._row(radio, "Offset (MHz)", ttk.Entry(radio, textvariable=self.offset_var, width=16), 1)
-        self._row(radio, "Squelch (0-8)", ttk.Entry(radio, textvariable=self.squelch_var, width=16), 2)
+        btn_row = ttk.Frame(conn)
+        btn_row.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        for i in range(5):
+            btn_row.columnconfigure(i, weight=1)
+        ttk.Button(btn_row, text="Refresh", command=self.refresh_ports).grid(row=0, column=0, sticky="ew")
+        ttk.Button(btn_row, text="Auto Identify", command=self.auto_identify_and_connect).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ttk.Button(btn_row, text="Connect", command=self.connect).grid(row=0, column=2, sticky="ew", padx=(6, 0))
+        ttk.Button(btn_row, text="Disconnect", command=self.disconnect).grid(row=0, column=3, sticky="ew", padx=(6, 0))
+        ttk.Button(btn_row, text="Read Version", command=self.read_version).grid(row=0, column=4, sticky="ew", padx=(6, 0))
 
-        bw_combo = ttk.Combobox(radio, textvariable=self.bandwidth_var, values=["Wide", "Narrow"], width=14, state="readonly")
+        radio = ttk.LabelFrame(parent, text="Radio Parameters", padding=8)
+        radio.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        radio.columnconfigure(1, weight=1)
+        self._row(radio, "Frequency (MHz)", ttk.Entry(radio, textvariable=self.frequency_var, width=14), 0)
+        self._row(radio, "Offset (MHz)", ttk.Entry(radio, textvariable=self.offset_var, width=14), 1)
+        self._row(radio, "Squelch (0-8)", ttk.Entry(radio, textvariable=self.squelch_var, width=14), 2)
+        bw_combo = ttk.Combobox(radio, textvariable=self.bandwidth_var, values=["Wide", "Narrow"], width=12, state="readonly")
         self._row(radio, "Bandwidth", bw_combo, 3)
-
-        self._row(radio, "CTCSS TX", ttk.Entry(radio, textvariable=self.ctcss_tx_var, width=16), 4)
-        self._row(radio, "CTCSS RX", ttk.Entry(radio, textvariable=self.ctcss_rx_var, width=16), 5)
-        self._row(radio, "DCS TX", ttk.Entry(radio, textvariable=self.dcs_tx_var, width=16), 6)
-        self._row(radio, "DCS RX", ttk.Entry(radio, textvariable=self.dcs_rx_var, width=16), 7)
-
-        ttk.Button(radio, text="Apply Radio", command=self.apply_radio).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-
-        filters = ttk.LabelFrame(left, text="Filters", padding=10)
-        filters.pack(fill="x", pady=(10, 0))
-
-        ttk.Checkbutton(filters, text="Disable pre/de-emphasis", variable=self.disable_emphasis_var).pack(anchor="w")
-        ttk.Checkbutton(filters, text="Disable high-pass", variable=self.disable_highpass_var).pack(anchor="w")
-        ttk.Checkbutton(filters, text="Disable low-pass", variable=self.disable_lowpass_var).pack(anchor="w")
-        ttk.Button(filters, text="Apply Filters", command=self.apply_filters).pack(fill="x", pady=(8, 0))
-
-        volume = ttk.LabelFrame(left, text="Volume", padding=10)
-        volume.pack(fill="x", pady=(10, 0))
-        ttk.Scale(volume, from_=1, to=8, variable=self.volume_var, orient="horizontal").pack(fill="x")
-        ttk.Button(volume, text="Apply Volume", command=self.apply_volume).pack(fill="x", pady=(8, 0))
-
-        audio = ttk.LabelFrame(left, text="Audio Test / APRS", padding=10)
-        audio.pack(fill="x", pady=(10, 0))
-        self._row(audio, "Tone Freq (Hz)", ttk.Entry(audio, textvariable=self.test_tone_freq_var, width=16), 0)
-        self._row(audio, "Tone Sec", ttk.Entry(audio, textvariable=self.test_tone_duration_var, width=16), 1)
-        self._row(audio, "APRS Source", ttk.Entry(audio, textvariable=self.aprs_source_var, width=16), 2)
-        self._row(audio, "APRS Dest", ttk.Entry(audio, textvariable=self.aprs_dest_var, width=16), 3)
-        self._row(audio, "APRS Path", ttk.Entry(audio, textvariable=self.aprs_path_var, width=16), 4)
-        self._row(audio, "APRS Text", ttk.Entry(audio, textvariable=self.aprs_message_var, width=24), 5)
-        self.audio_device_combo = ttk.Combobox(audio, textvariable=self.audio_device_var, width=36, state="readonly")
-        self._row(audio, "Audio Output", self.audio_device_combo, 6)
-        ttk.Checkbutton(audio, text="Key PTT during playback", variable=self.ptt_enabled_var).grid(
-            row=7, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        ttk.Button(radio, text="Apply Radio", command=self.apply_radio).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
-        ptt_line_combo = ttk.Combobox(audio, textvariable=self.ptt_line_var, values=["RTS", "DTR"], width=16, state="readonly")
-        self._row(audio, "PTT Line", ptt_line_combo, 8)
-        ttk.Checkbutton(audio, text="PTT Active High", variable=self.ptt_active_high_var).grid(
-            row=9, column=0, columnspan=2, sticky="w", pady=(0, 0)
-        )
-        self._row(audio, "PTT Pre (ms)", ttk.Entry(audio, textvariable=self.ptt_pre_ms_var, width=12), 10)
-        self._row(audio, "PTT Post (ms)", ttk.Entry(audio, textvariable=self.ptt_post_ms_var, width=12), 11)
-        ttk.Button(audio, text="Refresh Devices", command=self.refresh_audio_devices).grid(row=12, column=0, columnspan=2, sticky="ew", pady=(4, 0))
-        ttk.Button(audio, text="Play Test Tone", command=self.play_test_tone).grid(row=13, column=0, sticky="ew", pady=(8, 0))
-        ttk.Button(audio, text="Play APRS Packet", command=self.play_aprs_packet).grid(row=13, column=1, sticky="ew", pady=(8, 0), padx=(8, 0))
-        ttk.Button(audio, text="Stop Audio", command=self.stop_audio).grid(row=14, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
-        profiles = ttk.LabelFrame(parent, text="Profiles", padding=10)
-        profiles.pack(side="left", fill="y", padx=(10, 0))
-        ttk.Button(profiles, text="Save Profile", command=self.save_profile).pack(fill="x")
-        ttk.Button(profiles, text="Load Profile", command=self.load_profile).pack(fill="x", pady=(8, 0))
-
-        hints = (
-            "Hints\n"
-            "- Use either CTCSS or DCS, not both\n"
-            "- DCS format: 047N or 047I\n"
-            "- For no tone, leave tone fields empty"
+        audio = ttk.LabelFrame(parent, text="Audio Routing + Auto Detection", padding=8)
+        audio.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(8, 0), pady=(8, 0))
+        audio.columnconfigure(1, weight=1)
+        self.audio_device_combo = ttk.Combobox(audio, textvariable=self.audio_device_var, width=34, state="readonly")
+        self._row(audio, "Audio Output", self.audio_device_combo, 0)
+        self.aprs_rx_input_combo = ttk.Combobox(audio, textvariable=self.aprs_rx_input_var, width=34, state="readonly")
+        self._row(audio, "Audio Input", self.aprs_rx_input_combo, 1)
+        ttk.Button(audio, text="Refresh Audio Devices", command=self._refresh_all_audio_devices).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0)
         )
-        ttk.Label(profiles, text=hints, justify="left").pack(anchor="w", pady=(14, 0))
+        ttk.Button(audio, text="Auto Find TX/RX Pair", command=self.auto_find_audio_pair).grid(
+            row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        ttk.Button(audio, text="TX Channel Announce Sweep", command=self.tx_channel_announce_sweep).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        ttk.Button(audio, text="Auto Detect RX by Voice", command=self.auto_detect_input_by_voice).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        ttk.Checkbutton(
+            audio,
+            text="Auto-select SA818 audio on connect",
+            variable=self.auto_audio_select_var,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        ptt = ttk.LabelFrame(parent, text="PTT", padding=8)
+        ptt.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        ptt.columnconfigure(1, weight=1)
+        ttk.Checkbutton(ptt, text="Key PTT during TX audio", variable=self.ptt_enabled_var).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 2)
+        )
+        ptt_line_combo = ttk.Combobox(ptt, textvariable=self.ptt_line_var, values=["RTS", "DTR"], width=10, state="readonly")
+        self._row(ptt, "PTT Line", ptt_line_combo, 1)
+        ttk.Checkbutton(ptt, text="PTT Active High", variable=self.ptt_active_high_var).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(0, 2)
+        )
+        self._row(ptt, "PTT Pre (ms)", ttk.Entry(ptt, textvariable=self.ptt_pre_ms_var, width=10), 3)
+        self._row(ptt, "PTT Post (ms)", ttk.Entry(ptt, textvariable=self.ptt_post_ms_var, width=10), 4)
 
     def _build_aprs_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.rowconfigure(0, weight=1)
+
         left = ttk.Frame(parent)
-        left.pack(side="left", fill="both", expand=True)
+        left.grid(row=0, column=0, sticky="nsew")
+        right = ttk.Frame(parent)
+        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        left.columnconfigure(0, weight=1)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
 
-        tx_msg = ttk.LabelFrame(left, text="APRS Message TX", padding=10)
-        tx_msg.pack(fill="x")
-        self._row(tx_msg, "Source", ttk.Entry(tx_msg, textvariable=self.aprs_source_var, width=16), 0)
-        self._row(tx_msg, "Destination", ttk.Entry(tx_msg, textvariable=self.aprs_dest_var, width=16), 1)
-        self._row(tx_msg, "Path", ttk.Entry(tx_msg, textvariable=self.aprs_path_var, width=20), 2)
-        self._row(tx_msg, "To (Message)", ttk.Entry(tx_msg, textvariable=self.aprs_msg_to_var, width=16), 3)
-        self._row(tx_msg, "Text", ttk.Entry(tx_msg, textvariable=self.aprs_msg_text_var, width=32), 4)
-        self._row(tx_msg, "Msg ID (opt)", ttk.Entry(tx_msg, textvariable=self.aprs_msg_id_var, width=10), 5)
-        ttk.Checkbutton(tx_msg, text="Reliable Message (ACK/Retry)", variable=self.aprs_reliable_var).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(2, 2)
-        )
-        self._row(tx_msg, "ACK Timeout (sec)", ttk.Entry(tx_msg, textvariable=self.aprs_ack_timeout_var, width=10), 7)
-        self._row(tx_msg, "ACK Retries", ttk.Entry(tx_msg, textvariable=self.aprs_ack_retries_var, width=10), 8)
-        self._row(tx_msg, "TX Gain (0.05-0.40)", ttk.Entry(tx_msg, textvariable=self.aprs_tx_gain_var, width=10), 9)
-        self._row(tx_msg, "Preamble Flags", ttk.Entry(tx_msg, textvariable=self.aprs_preamble_flags_var, width=10), 10)
-        self._row(tx_msg, "TX Repeats", ttk.Entry(tx_msg, textvariable=self.aprs_tx_repeats_var, width=10), 11)
-        ttk.Button(tx_msg, text="Send APRS Message", command=self.send_aprs_message).grid(
-            row=12, column=0, columnspan=2, sticky="ew", pady=(8, 0)
-        )
+        identity = ttk.LabelFrame(left, text="APRS Identity + TX Tuning", padding=8)
+        identity.pack(fill="x")
+        self._row(identity, "Source", ttk.Entry(identity, textvariable=self.aprs_source_var, width=16), 0)
+        self._row(identity, "Destination", ttk.Entry(identity, textvariable=self.aprs_dest_var, width=16), 1)
+        self._row(identity, "Path", ttk.Entry(identity, textvariable=self.aprs_path_var, width=20), 2)
+        self._row(identity, "TX Gain (0.05-0.40)", ttk.Entry(identity, textvariable=self.aprs_tx_gain_var, width=10), 3)
+        self._row(identity, "Preamble Flags", ttk.Entry(identity, textvariable=self.aprs_preamble_flags_var, width=10), 4)
+        self._row(identity, "TX Repeats", ttk.Entry(identity, textvariable=self.aprs_tx_repeats_var, width=10), 5)
+        ttk.Checkbutton(
+            identity,
+            text="Re-init SA818 before APRS TX",
+            variable=self.aprs_tx_reinit_var,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
-        tx_pos = ttk.LabelFrame(left, text="APRS Position TX", padding=10)
-        tx_pos.pack(fill="x", pady=(10, 0))
+        tx_pos = ttk.LabelFrame(left, text="Position TX", padding=8)
+        tx_pos.pack(fill="x", pady=(8, 0))
         self._row(tx_pos, "Latitude (deg)", ttk.Entry(tx_pos, textvariable=self.aprs_lat_var, width=16), 0)
         self._row(tx_pos, "Longitude (deg)", ttk.Entry(tx_pos, textvariable=self.aprs_lon_var, width=16), 1)
         self._row(tx_pos, "Comment", ttk.Entry(tx_pos, textvariable=self.aprs_comment_var, width=32), 2)
-        ttk.Button(tx_pos, text="Send APRS Position", command=self.send_aprs_position).grid(
+        ttk.Button(tx_pos, text="Send Position", command=self.send_aprs_position).grid(
             row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
 
-        rx = ttk.LabelFrame(left, text="APRS RX (Audio Capture Decode)", padding=10)
-        rx.pack(fill="x", pady=(10, 0))
-        self.aprs_rx_input_combo = ttk.Combobox(rx, textvariable=self.aprs_rx_input_var, width=36, state="readonly")
-        self._row(rx, "Input Device", self.aprs_rx_input_combo, 0)
-        self._row(rx, "Capture Sec", ttk.Entry(rx, textvariable=self.aprs_rx_duration_var, width=8), 1)
-        self._row(rx, "Chunk Sec", ttk.Entry(rx, textvariable=self.aprs_rx_chunk_var, width=8), 2)
+        rx = ttk.LabelFrame(left, text="RX Monitor", padding=8)
+        rx.pack(fill="x", pady=(8, 0))
+        self._row(rx, "Capture Sec", ttk.Entry(rx, textvariable=self.aprs_rx_duration_var, width=8), 0)
+        self._row(rx, "Chunk Sec", ttk.Entry(rx, textvariable=self.aprs_rx_chunk_var, width=8), 1)
         ttk.Checkbutton(
             rx,
             text="Always-on RX Monitor",
             variable=self.aprs_rx_auto_var,
             command=self._on_auto_rx_toggle,
-        ).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
         ttk.Checkbutton(
             rx,
-            text="Auto-ACK direct APRS messages",
+            text="Auto-ACK direct messages",
             variable=self.aprs_auto_ack_var,
-        ).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(0, 0)
+        ).grid(row=3, column=0, columnspan=2, sticky="w")
+        ttk.Button(rx, text="One-Shot Decode", command=self.receive_aprs_capture).grid(
+            row=4, column=0, sticky="ew", pady=(8, 0)
         )
-        ttk.Button(rx, text="Refresh Inputs", command=self.refresh_input_devices).grid(
-            row=5, column=0, sticky="ew", pady=(8, 0)
+        ttk.Button(rx, text="Start Monitor", command=self.start_rx_monitor).grid(
+            row=4, column=1, sticky="ew", pady=(8, 0), padx=(8, 0)
         )
-        ttk.Button(rx, text="Receive APRS", command=self.receive_aprs_capture).grid(
-            row=5, column=1, sticky="ew", pady=(8, 0), padx=(8, 0)
-        )
-        ttk.Button(rx, text="Start RX Monitor", command=self.start_rx_monitor).grid(
-            row=6, column=0, sticky="ew", pady=(6, 0)
-        )
-        ttk.Button(rx, text="Stop RX Monitor", command=self.stop_rx_monitor).grid(
-            row=6, column=1, sticky="ew", pady=(6, 0), padx=(8, 0)
-        )
-        ttk.Button(rx, text="Auto Find Audio Pair", command=self.auto_find_audio_pair).grid(
-            row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0)
-        )
-        ttk.Checkbutton(
-            rx,
-            text="Auto-select SA818 audio on connect",
-            variable=self.auto_audio_select_var,
-        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        ttk.Checkbutton(
-            rx,
-            text="Re-init SA818 before APRS TX",
-            variable=self.aprs_tx_reinit_var,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 0))
-        ttk.Button(rx, text="TX Channel Announce Sweep", command=self.tx_channel_announce_sweep).grid(
-            row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0)
-        )
-        ttk.Button(rx, text="Auto Detect RX by Voice", command=self.auto_detect_input_by_voice).grid(
-            row=11, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        ttk.Button(rx, text="Stop Monitor", command=self.stop_rx_monitor).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
         )
 
-        right = ttk.LabelFrame(parent, text="APRS Monitor", padding=8)
-        right.pack(side="left", fill="both", expand=True, padx=(10, 0))
-        self.aprs_monitor = ScrolledText(right, height=28)
-        self.aprs_monitor.pack(fill="both", expand=True)
+        map_box = ttk.LabelFrame(right, text="Stations Map (Offline)", padding=8)
+        map_box.grid(row=0, column=0, sticky="nsew")
+        map_box.columnconfigure(0, weight=1)
+        self.aprs_map_canvas = tk.Canvas(map_box, height=260, background="#10212b", highlightthickness=0)
+        self.aprs_map_canvas.grid(row=0, column=0, sticky="nsew")
+        self.aprs_map_canvas.bind("<Configure>", lambda _e: self._draw_aprs_map_base())
+        self.aprs_map_canvas.bind("<ButtonPress-1>", self._on_map_press)
+        self.aprs_map_canvas.bind("<B1-Motion>", self._on_map_drag)
+        self.aprs_map_canvas.bind("<ButtonRelease-1>", self._on_map_release)
+        self.aprs_map_canvas.bind("<MouseWheel>", self._on_map_mousewheel)
+        map_btns = ttk.Frame(map_box)
+        map_btns.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        ttk.Button(map_btns, text="Clear Map", command=self.clear_aprs_map).pack(side="left")
+        ttk.Button(map_btns, text="Open Last In Browser", command=self.open_last_position_in_browser).pack(
+            side="left", padx=(8, 0)
+        )
+        ttk.Label(
+            map_box,
+            text="Offline map plots APRS position packets. Browser button opens last fix on OpenStreetMap.",
+        ).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self._draw_aprs_map_base()
+
+        monitor = ttk.LabelFrame(right, text="APRS Monitor", padding=8)
+        monitor.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        monitor.rowconfigure(0, weight=1)
+        monitor.columnconfigure(0, weight=1)
+        self.aprs_monitor = ScrolledText(monitor, height=18)
+        self.aprs_monitor.grid(row=0, column=0, sticky="nsew")
 
     def _build_setup_tab(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="Automated setup for third-party SA818 tools").pack(anchor="w")
-        ttk.Checkbutton(parent, text="Offline mode (use local fallback snapshots)", variable=self.offline_bootstrap_var).pack(anchor="w", pady=(6, 10))
-        ttk.Button(parent, text="Run Third-Party Bootstrap", command=self.run_bootstrap).pack(anchor="w")
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
 
-        help_text = (
-            "Bootstrap does:\n"
-            "1. Install/upgrade pip\n"
-            "2. Install pyserial\n"
-            "3. Clone/pull SA818 and SRFRS repos\n"
-            "4. Install SA818 python package\n"
+        advanced_radio = ttk.LabelFrame(parent, text="Advanced Radio", padding=8)
+        advanced_radio.grid(row=0, column=0, sticky="nsew")
+        advanced_radio.columnconfigure(1, weight=1)
+        self._row(advanced_radio, "CTCSS TX", ttk.Entry(advanced_radio, textvariable=self.ctcss_tx_var, width=16), 0)
+        self._row(advanced_radio, "CTCSS RX", ttk.Entry(advanced_radio, textvariable=self.ctcss_rx_var, width=16), 1)
+        self._row(advanced_radio, "DCS TX", ttk.Entry(advanced_radio, textvariable=self.dcs_tx_var, width=16), 2)
+        self._row(advanced_radio, "DCS RX", ttk.Entry(advanced_radio, textvariable=self.dcs_rx_var, width=16), 3)
+        ttk.Button(advanced_radio, text="Apply Radio (With Tone)", command=self.apply_radio).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
-        ttk.Label(parent, text=help_text, justify="left").pack(anchor="w", pady=(12, 0))
+        ttk.Checkbutton(advanced_radio, text="Disable pre/de-emphasis", variable=self.disable_emphasis_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        ttk.Checkbutton(advanced_radio, text="Disable high-pass", variable=self.disable_highpass_var).grid(
+            row=6, column=0, columnspan=2, sticky="w"
+        )
+        ttk.Checkbutton(advanced_radio, text="Disable low-pass", variable=self.disable_lowpass_var).grid(
+            row=7, column=0, columnspan=2, sticky="w"
+        )
+        ttk.Button(advanced_radio, text="Apply Filters", command=self.apply_filters).grid(
+            row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+        )
+        ttk.Label(advanced_radio, text="Volume").grid(row=9, column=0, sticky="w", pady=(8, 0))
+        ttk.Scale(advanced_radio, from_=1, to=8, variable=self.volume_var, orient="horizontal").grid(
+            row=9, column=1, sticky="ew", pady=(8, 0)
+        )
+        ttk.Button(advanced_radio, text="Apply Volume", command=self.apply_volume).grid(
+            row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+        )
+
+        tools = ttk.LabelFrame(parent, text="Audio + Profile Tools", padding=8)
+        tools.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        tools.columnconfigure(1, weight=1)
+        self._row(tools, "Tone Freq (Hz)", ttk.Entry(tools, textvariable=self.test_tone_freq_var, width=12), 0)
+        self._row(tools, "Tone Sec", ttk.Entry(tools, textvariable=self.test_tone_duration_var, width=12), 1)
+        self._row(tools, "Manual APRS Text", ttk.Entry(tools, textvariable=self.aprs_message_var, width=26), 2)
+        ttk.Button(tools, text="Play Test Tone", command=self.play_test_tone).grid(
+            row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+        )
+        ttk.Button(tools, text="Play APRS Packet (Message)", command=self.play_aprs_packet).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        ttk.Button(tools, text="Stop Audio", command=self.stop_audio).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        ttk.Separator(tools).grid(row=6, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Button(tools, text="Save Profile", command=self.save_profile).grid(
+            row=7, column=0, columnspan=2, sticky="ew"
+        )
+        ttk.Button(tools, text="Load Profile", command=self.load_profile).grid(
+            row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+
+        bootstrap = ttk.LabelFrame(parent, text="Third-Party Bootstrap", padding=8)
+        bootstrap.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        bootstrap.columnconfigure(0, weight=1)
+        ttk.Checkbutton(
+            bootstrap,
+            text="Offline mode (use local fallback snapshots)",
+            variable=self.offline_bootstrap_var,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Button(bootstrap, text="Run Third-Party Bootstrap", command=self.run_bootstrap).grid(
+            row=1, column=0, sticky="w", pady=(8, 0)
+        )
+        help_text = (
+            "Bootstrap installs pyserial and syncs SA818/SRFRS tools.\n"
+            "Use only when setting up a new machine."
+        )
+        ttk.Label(bootstrap, text=help_text, justify="left").grid(row=2, column=0, sticky="w", pady=(8, 0))
+
+    def _build_comms_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=2)
+        parent.rowconfigure(0, weight=1)
+
+        left = ttk.Frame(parent)
+        left.grid(row=0, column=0, sticky="nsew")
+        right = ttk.Frame(parent)
+        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        left.columnconfigure(0, weight=1)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
+
+        contacts = ttk.LabelFrame(left, text="Contacts", padding=8)
+        contacts.pack(fill="both", expand=True)
+        contacts.columnconfigure(0, weight=1)
+        self.contacts_list = tk.Listbox(contacts, height=8, exportselection=False)
+        self.contacts_list.grid(row=0, column=0, sticky="nsew")
+        self.contacts_list.bind("<<ListboxSelect>>", lambda _e: self._on_contact_selected())
+        add_row = ttk.Frame(contacts)
+        add_row.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        add_row.columnconfigure(0, weight=1)
+        ttk.Entry(add_row, textvariable=self.chat_new_contact_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(add_row, text="Add", command=self.add_contact).grid(row=0, column=1, padx=(6, 0))
+        ttk.Button(contacts, text="Remove Selected", command=self.remove_selected_contact).grid(
+            row=2, column=0, sticky="ew", pady=(6, 0)
+        )
+
+        heard = ttk.LabelFrame(left, text="Heard Stations", padding=8)
+        heard.pack(fill="both", expand=True, pady=(8, 0))
+        heard.columnconfigure(0, weight=1)
+        self.heard_list = tk.Listbox(heard, height=6, exportselection=False)
+        self.heard_list.grid(row=0, column=0, sticky="nsew")
+        ttk.Button(heard, text="Add Heard To Contacts", command=self.add_heard_to_contacts).grid(
+            row=1, column=0, sticky="ew", pady=(6, 0)
+        )
+
+        groups = ttk.LabelFrame(left, text="Groups", padding=8)
+        groups.pack(fill="both", expand=True, pady=(8, 0))
+        groups.columnconfigure(1, weight=1)
+        ttk.Label(groups, text="Name").grid(row=0, column=0, sticky="w")
+        ttk.Entry(groups, textvariable=self.chat_group_name_var).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ttk.Label(groups, text="Members (CSV)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(groups, textvariable=self.chat_group_members_var).grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(6, 0))
+        ttk.Button(groups, text="Save Group", command=self.save_group_from_fields).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
+        self.groups_list = tk.Listbox(groups, height=4, exportselection=False)
+        self.groups_list.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(6, 0))
+        self.groups_list.bind("<<ListboxSelect>>", lambda _e: self._on_group_selected())
+
+        target = ttk.LabelFrame(right, text="Conversation", padding=8)
+        target.grid(row=0, column=0, sticky="ew")
+        target.columnconfigure(1, weight=1)
+        ttk.Label(target, text="Target").grid(row=0, column=0, sticky="w")
+        ttk.Label(target, textvariable=self.chat_target_var).grid(row=0, column=1, sticky="w")
+        ttk.Button(target, text="Reply Last RX", command=self.reply_last_sender).grid(row=0, column=2, padx=(8, 0))
+
+        chat_box = ttk.LabelFrame(right, text="Chat History", padding=8)
+        chat_box.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
+        chat_box.rowconfigure(0, weight=1)
+        chat_box.columnconfigure(0, weight=1)
+        self.chat_history = ScrolledText(chat_box, height=18)
+        self.chat_history.grid(row=0, column=0, sticky="nsew")
+
+        compose = ttk.LabelFrame(right, text="Compose", padding=8)
+        compose.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        compose.columnconfigure(0, weight=1)
+        ttk.Entry(compose, textvariable=self.chat_compose_var).grid(row=0, column=0, sticky="ew")
+        ttk.Button(compose, text="Send To Selected Contact", command=self.send_chat_to_selected_contact).grid(
+            row=0, column=1, padx=(6, 0)
+        )
+        ttk.Button(compose, text="Send To Group", command=self.send_chat_to_selected_group).grid(
+            row=0, column=2, padx=(6, 0)
+        )
 
     @staticmethod
     def _row(frame: ttk.Frame, label: str, widget: ttk.Widget, row: int) -> None:
         ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", pady=4)
         widget.grid(row=row, column=1, sticky="ew", pady=4, padx=(8, 0))
         frame.columnconfigure(1, weight=1)
+
+    @staticmethod
+    def _norm_call(token: str) -> str:
+        return token.strip().upper()
+
+    def _refresh_contacts_ui(self) -> None:
+        if hasattr(self, "contacts_list"):
+            self.contacts_list.delete(0, "end")
+            for c in sorted(set(self._chat_contacts)):
+                self.contacts_list.insert("end", c)
+        if hasattr(self, "heard_list"):
+            self.heard_list.delete(0, "end")
+            for c in self._heard_stations[-200:]:
+                self.heard_list.insert("end", c)
+        if hasattr(self, "groups_list"):
+            self.groups_list.delete(0, "end")
+            for g in sorted(self._chat_groups.keys()):
+                members = ",".join(self._chat_groups[g][:6])
+                self.groups_list.insert("end", f"{g}: {members}")
+
+    def _append_chat_message(self, direction: str, src: str, dst: str, text: str, mid: str = "") -> None:
+        ts = datetime.now().strftime("%H:%M:%S")
+        item = {"ts": ts, "dir": direction, "src": src, "dst": dst, "text": text, "id": mid}
+        self._chat_messages.append(item)
+        if len(self._chat_messages) > 800:
+            self._chat_messages = self._chat_messages[-500:]
+        self._render_chat_history()
+
+    def _render_chat_history(self) -> None:
+        if not hasattr(self, "chat_history"):
+            return
+        target = self.chat_target_var.get().strip().upper()
+        self.chat_history.delete("1.0", "end")
+        for m in self._chat_messages:
+            if target:
+                if target.startswith("GROUP:"):
+                    g = target.split(":", 1)[1].strip()
+                    members = set(self._chat_groups.get(g, []))
+                    if m["src"] not in members and m["dst"] not in members:
+                        continue
+                else:
+                    if m["src"] != target and m["dst"] != target:
+                        continue
+            line = f"[{m['ts']}] {m['dir']} {m['src']} -> {m['dst']}: {m['text']}"
+            if m["id"]:
+                line += f" {{{m['id']}}}"
+            self.chat_history.insert("end", line + "\n")
+        self.chat_history.see("end")
+
+    def _note_heard_station(self, call: str) -> None:
+        c = self._norm_call(call)
+        if not c:
+            return
+        if c in self._heard_stations:
+            self._heard_stations = [x for x in self._heard_stations if x != c]
+        self._heard_stations.append(c)
+        if len(self._heard_stations) > 400:
+            self._heard_stations = self._heard_stations[-200:]
+        self._refresh_contacts_ui()
+
+    def add_contact(self) -> None:
+        c = self._norm_call(self.chat_new_contact_var.get())
+        if not c:
+            return
+        if c not in self._chat_contacts:
+            self._chat_contacts.append(c)
+        self.chat_new_contact_var.set("")
+        self._refresh_contacts_ui()
+
+    def remove_selected_contact(self) -> None:
+        if not hasattr(self, "contacts_list"):
+            return
+        sel = self.contacts_list.curselection()
+        if not sel:
+            return
+        c = self.contacts_list.get(sel[0]).strip().upper()
+        self._chat_contacts = [x for x in self._chat_contacts if x != c]
+        self._refresh_contacts_ui()
+
+    def add_heard_to_contacts(self) -> None:
+        if not hasattr(self, "heard_list"):
+            return
+        sel = self.heard_list.curselection()
+        if not sel:
+            return
+        c = self.heard_list.get(sel[0]).strip().upper()
+        if c and c not in self._chat_contacts:
+            self._chat_contacts.append(c)
+        self._refresh_contacts_ui()
+
+    def save_group_from_fields(self) -> None:
+        name = self.chat_group_name_var.get().strip().upper()
+        if not name:
+            return
+        members = [self._norm_call(x) for x in self.chat_group_members_var.get().split(",")]
+        members = [m for m in members if m]
+        if not members:
+            messagebox.showerror("Group", "Group members are required")
+            return
+        self._chat_groups[name] = members
+        self._refresh_contacts_ui()
+        self.log(f"Group saved: {name} ({len(members)} members)")
+
+    def _selected_contact(self) -> str:
+        if not hasattr(self, "contacts_list"):
+            t = self.chat_target_var.get().strip().upper()
+            return "" if t.startswith("GROUP:") else t
+        sel = self.contacts_list.curselection()
+        if not sel:
+            t = self.chat_target_var.get().strip().upper()
+            return "" if t.startswith("GROUP:") else t
+        return self.contacts_list.get(sel[0]).strip().upper()
+
+    def _selected_group_name(self) -> str:
+        if not hasattr(self, "groups_list"):
+            return ""
+        sel = self.groups_list.curselection()
+        if not sel:
+            return ""
+        token = self.groups_list.get(sel[0])
+        return token.split(":", 1)[0].strip().upper()
+
+    def _on_contact_selected(self) -> None:
+        c = self._selected_contact()
+        if not c:
+            return
+        self.chat_target_var.set(c)
+        self._render_chat_history()
+
+    def _on_group_selected(self) -> None:
+        g = self._selected_group_name()
+        if not g:
+            return
+        self.chat_target_var.set(f"GROUP:{g}")
+        members = ",".join(self._chat_groups.get(g, []))
+        self.chat_group_name_var.set(g)
+        self.chat_group_members_var.set(members)
+        self._render_chat_history()
+
+    def _send_chat_payload_to(self, to_call: str, text: str) -> None:
+        msg_id = self._make_message_id()
+        payload = build_aprs_message_payload(addressee=to_call, text=text, message_id=msg_id)
+        self._send_aprs_payload(payload, "chat")
+        src = self.aprs_source_var.get().strip().upper()
+        self._append_chat_message("TX", src, to_call, text, msg_id)
+
+    def send_chat_to_selected_contact(self) -> None:
+        to_call = self._selected_contact()
+        if not to_call:
+            messagebox.showerror("Comms", "Select a contact first")
+            return
+        text = self.chat_compose_var.get().strip()
+        if not text:
+            messagebox.showerror("Comms", "Message text is required")
+            return
+        self._send_chat_payload_to(to_call, text)
+        self.chat_compose_var.set("")
+
+    def send_chat_to_selected_group(self) -> None:
+        g = self._selected_group_name()
+        if not g:
+            messagebox.showerror("Comms", "Select a group first")
+            return
+        text = self.chat_compose_var.get().strip()
+        if not text:
+            messagebox.showerror("Comms", "Message text is required")
+            return
+        members = self._chat_groups.get(g, [])
+        if not members:
+            messagebox.showerror("Comms", "Selected group has no members")
+            return
+        for m in members:
+            self._send_chat_payload_to(m, f"[{g}] {text}")
+        self.chat_compose_var.set("")
+        self.chat_target_var.set(f"GROUP:{g}")
+        self._render_chat_history()
+
+    def reply_last_sender(self) -> None:
+        c = self._norm_call(self._last_direct_sender)
+        if not c:
+            messagebox.showinfo("Comms", "No direct sender to reply to yet.")
+            return
+        if c not in self._chat_contacts:
+            self._chat_contacts.append(c)
+        self._refresh_contacts_ui()
+        self.chat_target_var.set(c)
+        self._render_chat_history()
 
     def log(self, msg: str) -> None:
         self.log_text.insert("end", msg + "\n")
@@ -381,6 +815,10 @@ class HamHatControlApp(tk.Tk):
             if self.aprs_rx_input_var.get() not in entries:
                 self.aprs_rx_input_var.set("Default")
         self.log(f"Audio inputs: {entries}")
+
+    def _refresh_all_audio_devices(self) -> None:
+        self.refresh_audio_devices()
+        self.refresh_input_devices()
 
     def connect(self) -> None:
         port = self.port_var.get().strip()
@@ -514,6 +952,7 @@ class HamHatControlApp(tk.Tk):
 
     def disconnect(self) -> None:
         stop_playback()
+        self._tx_active = False
         self.client.disconnect()
         self.status_var.set("Disconnected")
         self.log("Disconnected")
@@ -607,6 +1046,8 @@ class HamHatControlApp(tk.Tk):
 
     def stop_audio(self) -> None:
         stop_playback()
+        self._tx_active = False
+        self._queue_output_level(0.0)
         self._set_ptt_safe()
         self.log("Audio playback stopped")
 
@@ -638,6 +1079,23 @@ class HamHatControlApp(tk.Tk):
         if pre_ms < 0 or post_ms < 0:
             raise ValueError("PTT pre/post must be >= 0")
         return pre_ms / 1000.0, post_ms / 1000.0
+
+    @staticmethod
+    def _estimate_wav_level(path: Path) -> float:
+        try:
+            with wave.open(str(path), "rb") as wavf:
+                width = wavf.getsampwidth()
+                channels = wavf.getnchannels()
+                raw = wavf.readframes(wavf.getnframes())
+            if width != 2:
+                return 0.6
+            x = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+            if channels > 1:
+                x = x.reshape(-1, channels)[:, 0]
+            rms = float(np.sqrt(np.mean((x / 32768.0) ** 2)))
+            return max(0.05, min(1.0, rms * 6.0))
+        except Exception:
+            return 0.6
 
     def _play_audio_with_optional_ptt(self, wav_path: Path, label: str) -> None:
         if self._audio_worker and self._audio_worker.is_alive():
@@ -677,11 +1135,15 @@ class HamHatControlApp(tk.Tk):
                     else:
                         self._queue_log("PTT skipped: radio not connected")
 
+                self._tx_level_hold = self._estimate_wav_level(wav_path)
+                self._tx_active = True
                 play_wav_blocking(wav_path, device_index=device_idx)
+                self._tx_active = False
 
                 if ptt_used and post_s > 0:
                     sleep(post_s)
             finally:
+                self._tx_active = False
                 if ptt_used:
                     try:
                         if self.client.connected:
@@ -734,6 +1196,147 @@ class HamHatControlApp(tk.Tk):
                 return
         self.aprs_rx_input_var.set("Default")
 
+    def _draw_aprs_map_base(self) -> None:
+        if not hasattr(self, "aprs_map_canvas"):
+            return
+        c = self.aprs_map_canvas
+        c.delete("all")
+        w = max(10, int(c.winfo_width() or c.cget("width")))
+        h = max(10, int(c.winfo_height() or c.cget("height")))
+        c.create_rectangle(0, 0, w, h, fill="#0f2531", outline="")
+        for lon in range(-180, 181, 30):
+            x, _ = self._latlon_to_map_xy(0.0, float(lon), w, h)
+            if 0 <= x <= w:
+                c.create_line(x, 0, x, h, fill="#21465d")
+        for lat in range(-90, 91, 15):
+            _, y = self._latlon_to_map_xy(float(lat), 0.0, w, h)
+            if 0 <= y <= h:
+                c.create_line(0, y, w, y, fill="#21465d")
+        c.create_text(8, 8, anchor="nw", text="Offline APRS Map (drag to pan, wheel to zoom)", fill="#d9edf7")
+        self._redraw_aprs_map_points()
+
+    def _latlon_to_map_xy(self, lat: float, lon: float, width: int, height: int) -> tuple[float, float]:
+        lon_c = max(-180.0, min(180.0, lon))
+        lat_c = max(-90.0, min(90.0, lat))
+        world_w = width * self._map_zoom
+        world_h = height * self._map_zoom
+        world_x = ((lon_c + 180.0) / 360.0) * world_w
+        world_y = ((90.0 - lat_c) / 180.0) * world_h
+        x = world_x - self._map_pan_x
+        y = world_y - self._map_pan_y
+        return x, y
+
+    def _map_xy_to_latlon(self, x: float, y: float, width: int, height: int) -> tuple[float, float]:
+        world_w = width * self._map_zoom
+        world_h = height * self._map_zoom
+        world_x = x + self._map_pan_x
+        world_y = y + self._map_pan_y
+        lon = (world_x / max(1.0, world_w)) * 360.0 - 180.0
+        lat = 90.0 - (world_y / max(1.0, world_h)) * 180.0
+        return max(-90.0, min(90.0, lat)), max(-180.0, min(180.0, lon))
+
+    def _redraw_aprs_map_points(self) -> None:
+        if not hasattr(self, "aprs_map_canvas"):
+            return
+        c = self.aprs_map_canvas
+        w = max(10, int(c.winfo_width() or c.cget("width")))
+        h = max(10, int(c.winfo_height() or c.cget("height")))
+        if not self._map_points:
+            c.create_text(w / 2, h / 2, text="No APRS positions yet", fill="#9cc4dd")
+            return
+        for lat, lon, label in self._map_points[-120:]:
+            x, y = self._latlon_to_map_xy(lat, lon, w, h)
+            if x < -10 or y < -10 or x > (w + 10) or y > (h + 10):
+                continue
+            c.create_oval(x - 3, y - 3, x + 3, y + 3, fill="#ffd166", outline="")
+            c.create_text(x + 6, y - 6, anchor="nw", text=label[:18], fill="#f5f7fa")
+
+    def _on_map_press(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        self._map_drag_last = (int(event.x), int(event.y))
+
+    def _on_map_drag(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        if self._map_drag_last is None:
+            return
+        lx, ly = self._map_drag_last
+        dx = int(event.x) - lx
+        dy = int(event.y) - ly
+        self._map_pan_x -= dx
+        self._map_pan_y -= dy
+        self._map_drag_last = (int(event.x), int(event.y))
+        self._draw_aprs_map_base()
+
+    def _on_map_release(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        click = self._map_drag_last is not None and abs(int(event.x) - self._map_drag_last[0]) < 4 and abs(int(event.y) - self._map_drag_last[1]) < 4
+        self._map_drag_last = None
+        if not click:
+            return
+        # If clicked near a station, show details.
+        if not hasattr(self, "aprs_map_canvas"):
+            return
+        c = self.aprs_map_canvas
+        w = max(10, int(c.winfo_width() or c.cget("width")))
+        h = max(10, int(c.winfo_height() or c.cget("height")))
+        ex = float(event.x)
+        ey = float(event.y)
+        nearest: tuple[float, float, str, float] | None = None
+        for lat, lon, label in self._map_points[-120:]:
+            x, y = self._latlon_to_map_xy(lat, lon, w, h)
+            d = ((x - ex) ** 2 + (y - ey) ** 2) ** 0.5
+            if nearest is None or d < nearest[3]:
+                nearest = (lat, lon, label, d)
+        if nearest and nearest[3] <= self._map_pick_radius_px:
+            lat, lon, label, _ = nearest
+            self._aprs_log(f"Map pick: {label} @ {lat:.5f}, {lon:.5f}")
+
+    def _on_map_mousewheel(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        if not hasattr(self, "aprs_map_canvas"):
+            return
+        c = self.aprs_map_canvas
+        w = max(10, int(c.winfo_width() or c.cget("width")))
+        h = max(10, int(c.winfo_height() or c.cget("height")))
+        pivot_x = float(event.x)
+        pivot_y = float(event.y)
+        lat0, lon0 = self._map_xy_to_latlon(pivot_x, pivot_y, w, h)
+        factor = 1.15 if event.delta > 0 else (1.0 / 1.15)
+        self._map_zoom = max(1.0, min(8.0, self._map_zoom * factor))
+        nx, ny = self._latlon_to_map_xy(lat0, lon0, w, h)
+        self._map_pan_x += (nx - pivot_x)
+        self._map_pan_y += (ny - pivot_y)
+        self._draw_aprs_map_base()
+
+    def _add_aprs_map_point(self, lat: float, lon: float, label: str) -> None:
+        self._map_points.append((lat, lon, label))
+        if len(self._map_points) > 200:
+            self._map_points = self._map_points[-120:]
+        if len(self._map_points) == 1 and hasattr(self, "aprs_map_canvas"):
+            w = max(10, int(self.aprs_map_canvas.winfo_width() or self.aprs_map_canvas.cget("width")))
+            h = max(10, int(self.aprs_map_canvas.winfo_height() or self.aprs_map_canvas.cget("height")))
+            world_w = w * self._map_zoom
+            world_h = h * self._map_zoom
+            world_x = ((max(-180.0, min(180.0, lon)) + 180.0) / 360.0) * world_w
+            world_y = ((90.0 - max(-90.0, min(90.0, lat))) / 180.0) * world_h
+            self._map_pan_x = world_x - (w / 2.0)
+            self._map_pan_y = world_y - (h / 2.0)
+        self._last_aprs_position = (lat, lon, label)
+        self._draw_aprs_map_base()
+
+    def clear_aprs_map(self) -> None:
+        self._map_points.clear()
+        self._last_aprs_position = None
+        self._map_zoom = 1.0
+        self._map_pan_x = 0.0
+        self._map_pan_y = 0.0
+        self._draw_aprs_map_base()
+        self._aprs_log("Map cleared")
+
+    def open_last_position_in_browser(self) -> None:
+        if not self._last_aprs_position:
+            messagebox.showinfo("Map", "No APRS position plotted yet.")
+            return
+        lat, lon, _ = self._last_aprs_position
+        url = f"https://www.openstreetmap.org/?mlat={lat:.6f}&mlon={lon:.6f}#map=13/{lat:.6f}/{lon:.6f}"
+        webbrowser.open(url, new=2)
+
     def _aprs_log(self, msg: str) -> None:
         self._ui_queue.put(("aprs", msg, None))
 
@@ -765,6 +1368,28 @@ class HamHatControlApp(tk.Tk):
                     self._set_input_device_by_index(in_idx)
                     self._update_audio_hints_from_selection()
                     self.log(f"Applied input device: {in_idx}")
+                elif kind == "map_point":
+                    lat = float(a)
+                    payload = (b or "").split("|", 1)
+                    lon = float(payload[0]) if payload and payload[0] else 0.0
+                    label = payload[1] if len(payload) > 1 else "APRS"
+                    self._add_aprs_map_point(lat, lon, label)
+                elif kind == "meter_in":
+                    self.input_level_var.set(max(0.0, min(1.0, float(a))))
+                elif kind == "meter_out":
+                    self.output_level_var.set(max(0.0, min(1.0, float(a))))
+                elif kind == "wf_row":
+                    self._push_waterfall_row(a)
+                elif kind == "heard_station":
+                    self._note_heard_station(a)
+                elif kind == "chat_msg":
+                    payload = (b or "").split("|", 4)
+                    if len(payload) >= 4:
+                        src = payload[0]
+                        dst = payload[1]
+                        text = payload[2]
+                        mid = payload[3] if len(payload) > 3 else ""
+                        self._append_chat_message(a, src, dst, text, mid)
                 elif kind == "auto_ack":
                     try:
                         ack_payload = build_aprs_ack_payload(addressee=a, message_id=(b or ""))
@@ -784,6 +1409,127 @@ class HamHatControlApp(tk.Tk):
 
     def _queue_auto_ack(self, addressee: str, message_id: str) -> None:
         self._ui_queue.put(("auto_ack", addressee, message_id))
+
+    def _queue_map_point(self, lat: float, lon: float, label: str) -> None:
+        self._ui_queue.put(("map_point", f"{lat:.6f}", f"{lon:.6f}|{label}"))
+
+    def _queue_input_level(self, level: float) -> None:
+        self._ui_queue.put(("meter_in", f"{level:.4f}", None))
+
+    def _queue_output_level(self, level: float) -> None:
+        self._ui_queue.put(("meter_out", f"{level:.4f}", None))
+
+    def _queue_waterfall_row(self, row: str) -> None:
+        self._ui_queue.put(("wf_row", row, None))
+
+    def _queue_heard_station(self, call: str) -> None:
+        self._ui_queue.put(("heard_station", call, None))
+
+    def _queue_chat_message(self, direction: str, src: str, dst: str, text: str, mid: str = "") -> None:
+        safe_text = text.replace("|", "/")
+        self._ui_queue.put(("chat_msg", direction, f"{src}|{dst}|{safe_text}|{mid}"))
+
+    @staticmethod
+    def _wf_color(v: int) -> str:
+        x = max(0, min(255, int(v)))
+        if x < 64:
+            r, g, b = 0, 0, 30 + (x * 2)
+        elif x < 128:
+            t = x - 64
+            r, g, b = 0, t * 3, 160 + (t // 2)
+        elif x < 192:
+            t = x - 128
+            r, g, b = t * 3, 180 + t, 255 - t * 3
+        else:
+            t = x - 192
+            r, g, b = 200 + t * 2, 255 - t, 60 - min(60, t * 2)
+        return f"#{max(0,min(255,r)):02x}{max(0,min(255,g)):02x}{max(0,min(255,b)):02x}"
+
+    def _push_waterfall_row(self, row: str) -> None:
+        if self._waterfall_photo is None:
+            return
+        tokens = row.split(",")
+        if len(tokens) < self._waterfall_width:
+            return
+        arr = np.array([int(t) for t in tokens[: self._waterfall_width]], dtype=np.uint8)
+        self._waterfall_buffer[:-1, :] = self._waterfall_buffer[1:, :]
+        self._waterfall_buffer[-1, :] = arr
+        h = self._waterfall_height
+        rows = []
+        for y in range(h):
+            line = "{" + " ".join(self._wf_color(v) for v in self._waterfall_buffer[y, :]) + "}"
+            rows.append(line)
+        self._waterfall_photo.put(" ".join(rows), to=(0, 0, self._waterfall_width, h))
+
+    @staticmethod
+    def _level_from_samples(mono: np.ndarray) -> float:
+        if len(mono) == 0:
+            return 0.0
+        x = np.asarray(mono, dtype=np.float32).reshape(-1)
+        return float(np.sqrt(np.mean(x * x)))
+
+    def _spectrum_row_from_samples(self, rate: int, mono: np.ndarray) -> str:
+        x = np.asarray(mono, dtype=np.float32).reshape(-1)
+        if len(x) < 256:
+            return ",".join(["0"] * self._waterfall_width)
+        x = x - float(np.mean(x))
+        nfft = 1024
+        if len(x) < nfft:
+            pad = np.zeros(nfft, dtype=np.float32)
+            pad[: len(x)] = x
+            xw = pad
+        else:
+            xw = x[-nfft:]
+        xw = xw * np.hanning(len(xw))
+        spec = np.fft.rfft(xw)
+        mag = np.abs(spec)
+        freqs = np.fft.rfftfreq(len(xw), d=(1.0 / float(rate)))
+        mask = (freqs >= 0.0) & (freqs <= 3000.0)
+        mag = mag[mask]
+        if len(mag) < 8:
+            return ",".join(["0"] * self._waterfall_width)
+        tgt_x = np.linspace(0, len(mag) - 1, self._waterfall_width)
+        vals = np.interp(tgt_x, np.arange(len(mag)), mag)
+        vals = np.log10(1.0 + vals)
+        vmax = float(np.max(vals))
+        if vmax > 1e-9:
+            vals = vals / vmax
+        bins = np.clip((vals * 255.0).astype(np.int32), 0, 255)
+        return ",".join(str(int(v)) for v in bins.tolist())
+
+    def _start_audio_visualizer(self) -> None:
+        if self._visualizer_running:
+            return
+        self._visualizer_running = True
+
+        def worker() -> None:
+            out_level = 0.0
+            while self._visualizer_running:
+                try:
+                    if self._tx_active:
+                        out_level = max(out_level, self._tx_level_hold)
+                    else:
+                        out_level *= 0.86
+                    self._queue_output_level(out_level)
+
+                    if self._audio_lock.acquire(timeout=0.02):
+                        try:
+                            dev = self._selected_input_device()
+                            rate, mono = capture_samples(seconds=0.12, device_index=dev)
+                        finally:
+                            self._audio_lock.release()
+                        in_level = min(1.0, self._level_from_samples(mono) * 8.0)
+                        self._queue_input_level(in_level)
+                        self._queue_waterfall_row(self._spectrum_row_from_samples(rate, mono))
+                    sleep(0.12)
+                except Exception:
+                    sleep(0.2)
+
+        self._visualizer_thread = threading.Thread(target=worker, daemon=True)
+        self._visualizer_thread.start()
+
+    def _stop_audio_visualizer(self) -> None:
+        self._visualizer_running = False
 
     @staticmethod
     def _call_variants(call: str) -> set[str]:
@@ -822,13 +1568,25 @@ class HamHatControlApp(tk.Tk):
                 self._ack_condition.wait(timeout=remain)
 
     def _handle_rx_packet(self, pkt_text: str, pkt_source: str, pkt_info: str) -> None:
+        self._queue_heard_station(pkt_source)
+        pos = parse_aprs_position_info(pkt_info)
+        if pos:
+            lat, lon, comment = pos
+            label = pkt_source
+            if comment:
+                label = f"{pkt_source} {comment[:16]}"
+            self._queue_map_point(lat, lon, label)
+            self._aprs_log(f"RX position {pkt_source}: {lat:.5f}, {lon:.5f}")
+
         parsed = parse_aprs_message_info(pkt_info)
         if not parsed:
             return
         addressee, msg_text, msg_id = parsed
+        self._queue_chat_message("RX", pkt_source, addressee, msg_text, msg_id or "")
         local_calls = self._call_variants(self.aprs_source_var.get())
         if addressee not in local_calls:
             return
+        self._last_direct_sender = pkt_source
 
         if msg_text.lower().startswith("ack"):
             ack_id = msg_text[3:].strip()[:5]
@@ -967,8 +1725,11 @@ class HamHatControlApp(tk.Tk):
             self.client.set_ptt(True, line=ptt_line, active_high=ptt_active_high)
             try:
                 sleep(max(0.0, pre_ms / 1000.0))
+                self._tx_level_hold = self._estimate_wav_level(wav_path)
+                self._tx_active = True
                 play_wav_blocking(wav_path, device_index=out_dev)
             finally:
+                self._tx_active = False
                 sleep(max(0.0, post_ms / 1000.0))
                 self.client.set_ptt(False, line=ptt_line, active_high=ptt_active_high)
 
@@ -1094,8 +1855,11 @@ class HamHatControlApp(tk.Tk):
                                 try:
                                     if pre_s > 0:
                                         sleep(pre_s)
+                                    self._tx_level_hold = self._estimate_wav_level(tx_wav)
+                                    self._tx_active = True
                                     play_wav_blocking(tx_wav, device_index=out_idx)
                                 finally:
+                                    self._tx_active = False
                                     if post_s > 0:
                                         sleep(post_s)
                                     self.client.set_ptt(False, line=line, active_high=active_high)
@@ -1242,10 +2006,13 @@ class HamHatControlApp(tk.Tk):
                             try:
                                 if pre_s > 0:
                                     sleep(pre_s)
+                                self._tx_level_hold = self._estimate_wav_level(wav_path)
+                                self._tx_active = True
                                 self._play_wav_on_device_compatible(wav_path, out_idx)
                                 if post_s > 0:
                                     sleep(post_s)
                             finally:
+                                self._tx_active = False
                                 self.client.set_ptt(False, line=ptt_line, active_high=ptt_active_high)
                         self._queue_log(f"Announced TX channel {out_idx}: {out_name}")
                     except Exception as exc:  # noqa: BLE001
@@ -1402,6 +2169,7 @@ class HamHatControlApp(tk.Tk):
                 comment=self.aprs_comment_var.get().strip(),
             )
             self._send_aprs_payload(payload, "position")
+            self._add_aprs_map_point(lat, lon, f"TX {self.aprs_source_var.get().strip().upper()}")
         except Exception as exc:  # noqa: BLE001
             self._aprs_log(f"Send APRS position failed: {exc}")
             messagebox.showerror("APRS TX Error", str(exc))
@@ -1565,6 +2333,8 @@ class HamHatControlApp(tk.Tk):
             "ptt_active_high": self.ptt_active_high_var.get(),
             "ptt_pre_ms": self.ptt_pre_ms_var.get(),
             "ptt_post_ms": self.ptt_post_ms_var.get(),
+            "chat_contacts": self._chat_contacts,
+            "chat_groups": self._chat_groups,
         }
         PROFILE_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
         self.log(f"Profile saved: {PROFILE_PATH}")
@@ -1586,7 +2356,7 @@ class HamHatControlApp(tk.Tk):
         self.disable_emphasis_var.set(bool(data.get("disable_emphasis", True)))
         self.disable_highpass_var.set(bool(data.get("disable_highpass", True)))
         self.disable_lowpass_var.set(bool(data.get("disable_lowpass", True)))
-        self.volume_var.set(int(data.get("volume", 5)))
+        self.volume_var.set(int(data.get("volume", 8)))
         self.test_tone_freq_var.set(data.get("test_tone_freq", "1200"))
         self.test_tone_duration_var.set(data.get("test_tone_duration", "2.0"))
         self.aprs_source_var.set(data.get("aprs_source", "N0CALL-9"))
@@ -1620,6 +2390,15 @@ class HamHatControlApp(tk.Tk):
         self.ptt_active_high_var.set(bool(data.get("ptt_active_high", True)))
         self.ptt_pre_ms_var.set(data.get("ptt_pre_ms", "400"))
         self.ptt_post_ms_var.set(data.get("ptt_post_ms", "120"))
+        self._chat_contacts = [self._norm_call(x) for x in data.get("chat_contacts", []) if self._norm_call(x)]
+        raw_groups = data.get("chat_groups", {})
+        if isinstance(raw_groups, dict):
+            self._chat_groups = {
+                self._norm_call(k): [self._norm_call(x) for x in v if self._norm_call(x)]
+                for k, v in raw_groups.items()
+                if self._norm_call(k)
+            }
+        self._refresh_contacts_ui()
         if self.auto_audio_select_var.get():
             self._auto_select_audio_devices()
         self.log(f"Profile loaded: {PROFILE_PATH}")
@@ -1654,6 +2433,8 @@ class HamHatControlApp(tk.Tk):
     def _on_close(self) -> None:
         self.stop_rx_monitor()
         stop_playback()
+        self._stop_audio_visualizer()
+        self._tx_active = False
         self._set_ptt_safe()
         try:
             self.client.disconnect()

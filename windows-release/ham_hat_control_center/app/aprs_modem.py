@@ -63,6 +63,48 @@ def parse_aprs_message_info(info: str) -> tuple[str, str, str | None] | None:
         return None
 
 
+def parse_aprs_position_info(info: str) -> tuple[float, float, str] | None:
+    """
+    Parse APRS position payload (common uncompressed variants).
+
+    Supported data types:
+      ! or =  : no timestamp
+      / or @  : timestamped (DDHHMMz/h or HHMMSSh)
+
+    Returns:
+      (lat_deg, lon_deg, comment) or None when parsing is not possible.
+    """
+    if not info:
+        return None
+    dti = info[0]
+    if dti not in ("!", "=", "/", "@"):
+        return None
+
+    payload = info
+    if dti in ("/", "@"):
+        # Skip timestamp (7 chars after DTI), if present.
+        if len(info) < 8:
+            return None
+        payload = info[8:]
+    else:
+        payload = info[1:]
+
+    # Uncompressed position: DDMM.hhN/DDDMM.hhW[symbol][comment...]
+    # We decode only standard numeric lat/lon packets.
+    if len(payload) < 19:
+        return None
+
+    lat_s = payload[0:8]
+    lon_s = payload[9:18]
+    comment = payload[19:] if len(payload) > 19 else ""
+
+    lat = _parse_aprs_lat(lat_s)
+    lon = _parse_aprs_lon(lon_s)
+    if lat is None or lon is None:
+        return None
+    return lat, lon, comment
+
+
 def build_aprs_position_payload(
     lat_deg: float,
     lon_deg: float,
@@ -332,3 +374,35 @@ def _format_lon(lon: float) -> str:
     deg = int(a)
     mins = (a - deg) * 60.0
     return f"{deg:03d}{mins:05.2f}{hemi}"
+
+
+def _parse_aprs_lat(token: str) -> float | None:
+    # DDMM.hhN
+    if len(token) != 8:
+        return None
+    try:
+        deg = int(token[0:2])
+        mins = float(token[2:7])
+        hemi = token[7].upper()
+        if hemi not in ("N", "S"):
+            return None
+        val = float(deg) + (mins / 60.0)
+        return val if hemi == "N" else -val
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _parse_aprs_lon(token: str) -> float | None:
+    # DDDMM.hhE
+    if len(token) != 9:
+        return None
+    try:
+        deg = int(token[0:3])
+        mins = float(token[3:8])
+        hemi = token[8].upper()
+        if hemi not in ("E", "W"):
+            return None
+        val = float(deg) + (mins / 60.0)
+        return val if hemi == "E" else -val
+    except Exception:  # noqa: BLE001
+        return None
