@@ -132,7 +132,7 @@ class HamHatControlApp(tk.Tk):
         self.aprs_comment_var = tk.StringVar(value="uConsole HAM HAT")
         self.aprs_rx_input_var = tk.StringVar(value="Default")
         self.aprs_rx_duration_var = tk.StringVar(value="10")
-        self.aprs_rx_chunk_var = tk.StringVar(value="2.0")
+        self.aprs_rx_chunk_var = tk.StringVar(value="4.0")
         self.aprs_rx_auto_var = tk.BooleanVar(value=False)
         # Baseline defaults validated over-the-air with handheld decode.
         self.aprs_tx_gain_var = tk.StringVar(value="0.34")
@@ -152,6 +152,7 @@ class HamHatControlApp(tk.Tk):
         self._rx_monitor_running = False
         self._audio_lock = threading.Lock()
         self._rx_overlap_samples = None
+        self._rx_chunk_floor_logged = False
         self._last_rx_text = ""
         self._last_rx_time = 0.0
         self._ui_queue: queue.Queue[tuple[str, str, str | None]] = queue.Queue()
@@ -1826,6 +1827,12 @@ class HamHatControlApp(tk.Tk):
                         out_level *= 0.86
                     self._queue_output_level(out_level)
 
+                    # On Windows, background capture uses a subprocess path. Let RX monitor own
+                    # input capture to avoid lock contention and packet loss during APRS monitoring.
+                    if self._rx_monitor_running:
+                        sleep(poll_s)
+                        continue
+
                     if self._audio_lock.acquire(timeout=0.02):
                         try:
                             dev = self._selected_input_device()
@@ -2610,6 +2617,13 @@ class HamHatControlApp(tk.Tk):
                 chunk = float(self.aprs_rx_chunk_var.get().strip())
                 if chunk <= 0:
                     chunk = 2.0
+                if platform.system().lower() == "windows" and chunk < 4.0:
+                    # Worker-based capture has non-trivial process startup overhead on Windows.
+                    # Use a larger chunk to reduce dead-time between captures and improve RX hit rate.
+                    chunk = 4.0
+                    if not self._rx_chunk_floor_logged:
+                        self._rx_chunk_floor_logged = True
+                        self._aprs_log("RX monitor: Windows minimum chunk forced to 4.0s for reliability")
                 dev = self._selected_input_device()
                 if not self._audio_lock.acquire(timeout=0.15):
                     sleep(0.05)
@@ -2618,6 +2632,10 @@ class HamHatControlApp(tk.Tk):
                     rate, mono = self._capture_samples_compatible(seconds=chunk, device_index=dev)
                 finally:
                     self._audio_lock.release()
+                # Keep spectrum/meter live from the same captured block used for decode.
+                in_level = min(1.0, self._level_from_samples(mono) * 8.0)
+                self._queue_input_level(in_level)
+                self._queue_waterfall_row(self._spectrum_row_from_samples(rate, mono))
                 overlap = self._rx_overlap_samples
                 if overlap is not None and len(overlap) > 0:
                     decode_samples = np.concatenate((overlap, mono))
