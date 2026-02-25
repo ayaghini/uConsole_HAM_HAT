@@ -206,35 +206,38 @@ def decode_ax25_from_samples(rate: int, mono: np.ndarray) -> list[DecodedPacket]
     if len(mono) < 200:
         return []
 
-    cleaned = _preprocess_samples(mono)
-    demod = _afsk_discriminator(cleaned, rate)
-    if len(demod) < 200:
-        return []
-
+    cleaned = _preprocess_samples(mono, rate)
     samples_per_bit = rate / 1200.0
-    spp_candidates = [samples_per_bit * (1.0 + d) for d in (-0.018, -0.012, -0.006, 0.0, 0.006, 0.012, 0.018)]
-    best_count = 0
-    best_packets: dict[str, DecodedPacket] = {}
-    # Try both tone orientations because some audio chains can appear inverted.
-    for invert_tones in (False, True):
-        for spp in spp_candidates:
-            max_off = max(1, int(round(spp)))
-            for offset in range(max_off):
-                levels = _extract_nrzi_levels(demod, spp, offset, invert_tones=invert_tones)
-                if len(levels) < 32:
-                    continue
-                bits = _nrzi_to_bits(levels)
-                frames = _extract_hdlc_frames(bits)
-                decoded_packets: dict[str, DecodedPacket] = {}
-                for frame in frames:
-                    decoded = _decode_ax25_frame(frame)
-                    if not decoded:
+    # Widen timing drift tolerance for interoperability with radios/modems that
+    # run slightly off nominal 1200 baud.
+    spp_candidates = [samples_per_bit * (1.0 + d) for d in (-0.036, -0.024, -0.012, 0.0, 0.012, 0.024, 0.036)]
+    merged_packets: dict[str, DecodedPacket] = {}
+    # Primary Bell 202 plus conservative fallbacks for radios/modems that skew tones.
+    tone_pairs = (
+        (1200.0, 2200.0),  # Bell 202 APRS
+        (1600.0, 1800.0),  # narrow-separation fallback
+        (1200.0, 2400.0),  # wider-separation fallback
+    )
+    for mark_hz, space_hz in tone_pairs:
+        demod = _afsk_discriminator(cleaned, rate, mark_hz=mark_hz, space_hz=space_hz)
+        if len(demod) < 200:
+            continue
+        # Try both tone orientations because some audio chains can appear inverted.
+        for invert_tones in (False, True):
+            for spp in spp_candidates:
+                max_off = max(1, int(round(spp)))
+                for offset in range(max_off):
+                    levels = _extract_nrzi_levels(demod, spp, offset, invert_tones=invert_tones)
+                    if len(levels) < 32:
                         continue
-                    decoded_packets[decoded.text] = decoded
-                if len(decoded_packets) > best_count:
-                    best_count = len(decoded_packets)
-                    best_packets = decoded_packets
-    return list(best_packets.values())
+                    bits = _nrzi_to_bits(levels)
+                    frames = _extract_hdlc_frames(bits)
+                    for frame in frames:
+                        decoded = _decode_ax25_frame(frame)
+                        if not decoded:
+                            continue
+                        merged_packets[decoded.text] = decoded
+    return list(merged_packets.values())
 
 
 def _read_wav_mono(path: str) -> tuple[int, np.ndarray]:
@@ -251,13 +254,20 @@ def _read_wav_mono(path: str) -> tuple[int, np.ndarray]:
     return rate, data
 
 
-def _preprocess_samples(samples: np.ndarray) -> np.ndarray:
+def _preprocess_samples(samples: np.ndarray, rate: int) -> np.ndarray:
     x = np.asarray(samples, dtype=np.float32)
     if x.ndim != 1:
         x = x.reshape(-1)
     if len(x) == 0:
         return x
     x = x - float(np.mean(x))
+    # Band-limit around Bell 202 AFSK region to reject strong CTCSS hum and HF hiss.
+    if len(x) >= 256:
+        # Remove low-frequency content (sub-audio/voice rumble) with a simple FIR HP.
+        lp_lo = np.convolve(x, _lowpass_kernel(rate, cutoff_hz=700.0, taps=101), mode="same")
+        x = x - lp_lo.astype(np.float32, copy=False)
+        # Remove out-of-band high-frequency content.
+        x = np.convolve(x, _lowpass_kernel(rate, cutoff_hz=2600.0, taps=101), mode="same").astype(np.float32, copy=False)
     peak = float(np.max(np.abs(x)))
     if peak > 1e-6:
         x = x / peak
@@ -279,13 +289,13 @@ def _lowpass_kernel(rate: int, cutoff_hz: float, taps: int = 81) -> np.ndarray:
     return (h / s).astype(np.float32)
 
 
-def _afsk_discriminator(samples: np.ndarray, rate: int) -> np.ndarray:
+def _afsk_discriminator(samples: np.ndarray, rate: int, mark_hz: float = 1200.0, space_hz: float = 2200.0) -> np.ndarray:
     if len(samples) < 128:
         return np.array([], dtype=np.float32)
 
     n = np.arange(len(samples), dtype=np.float64)
-    w_mark = 2.0 * math.pi * 1200.0 / float(rate)
-    w_space = 2.0 * math.pi * 2200.0 / float(rate)
+    w_mark = 2.0 * math.pi * float(mark_hz) / float(rate)
+    w_space = 2.0 * math.pi * float(space_hz) / float(rate)
     mark_mix = samples.astype(np.float64) * np.exp(-1j * w_mark * n)
     space_mix = samples.astype(np.float64) * np.exp(-1j * w_space * n)
 

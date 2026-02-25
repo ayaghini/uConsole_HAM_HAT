@@ -1,95 +1,78 @@
-# uConsole HAM Radio HAT
+﻿# uConsole HAM HAT
 
-[![Status](https://img.shields.io/badge/status-prototype-yellow.svg)](https://github.com/ayaghini/uconsole-ham-hat)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Hardware](https://img.shields.io/badge/hardware-rev_1.0-green.svg)](hardware/)
-[![Made for](https://img.shields.io/badge/platform-uConsole-red.svg)](https://clockworkpi.com/pages/uconsole)
+uConsole HAM HAT is a hardware and software project for SA818-based 2m radio control and APRS workflows.
 
----
+Current repository status:
+- Hardware design baseline and manufacturing notes are documented.
+- A cross-platform control app exists with:
+  - Raspberry Pi mode for serial/radio configuration.
+  - Windows mode for full APRS TX/RX, map, and comms workflows.
 
-The **uConsole HAM Radio HAT** is a dedicated expansion board designed for **ham radio operators**.  
-It enables full **digital mode operation** (receive and transmit) on the **2-meter band** using an **SA818 transceiver module**, providing both **audio** and **serial control** paths.
+## Key Capabilities
 
----
+- SA818 serial discovery, connect, version read, and programming.
+- Radio parameter control (frequency, offset, squelch, bandwidth, tones).
+- Filter and volume control.
+- Profile save/load.
+- Third-party bootstrap (SA818 + SRFRS tooling).
+- Windows package extras:
+  - APRS message and position TX.
+  - APRS RX decode (one-shot and monitor).
+  - Reliable direct messaging with ACK/retry.
+  - Contact/group comms with intro discovery packets.
+  - Audio routing and auto-mapping utilities.
+  - Offline station map with OpenStreetMap handoff.
 
-## ✳️ Features
+## Repository Layout
 
-- **Integrated sound modem** for digital mode operation  
-- **PTT and serial control** interface for SA818 module  
-- **Dedicated audio and serial ports** — fully compatible with **Digirig cables and configurations**  
-- **10/100 Ethernet interface** for network connectivity  
-- **Dual connectivity options**:
-  - Direct connection to the **uConsole AIO extension** via internal 4-pin pads  
-  - External connection via **USB-C** port (works as a standalone portable device)
-- Clean power and ground isolation design for low noise operation
+- `docs/`: architecture, operations, manufacturing, specification, user docs.
+- `pi-release/ham_hat_control_center/`: Raspberry Pi application package.
+- `windows-release/ham_hat_control_center/`: Windows application package.
+- `PCB/`, `CAD/`, `Components/`: design assets (see source-of-truth doc).
+- `Pictures/`: project photos/screenshots.
 
----
+## Quick Start
 
-## 🔧 Usage
+Windows:
+- [windows-release/ham_hat_control_center/QUICK_START_WINDOWS.md](windows-release/ham_hat_control_center/QUICK_START_WINDOWS.md)
 
-The HAT can operate either:
-1. **Internally**, mounted on the top of the uConsole, and connected inside the uConsole through the exposed 4-pin connector, **or**
-2. **Externally**, using any other computer, as a standalone portable interface connected via **USB-C**.
+Raspberry Pi:
+- [pi-release/ham_hat_control_center/QUICK_START.md](pi-release/ham_hat_control_center/QUICK_START.md)
 
-This flexibility allows the board to serve as both a fixed and field-portable digital interface for modern ham operators.
+## Documentation Index
 
----
+- Functional specification:
+  - [docs/specifications/functional-specification.md](docs/specifications/functional-specification.md)
+- Full user manual:
+  - [docs/user-manual.md](docs/user-manual.md)
+- Source-of-truth map:
+  - [docs/architecture/source-of-truth.md](docs/architecture/source-of-truth.md)
+- Bring-up guide:
+  - [docs/operations/bring-up.md](docs/operations/bring-up.md)
+- Manufacturing readiness:
+  - [docs/manufacturing/rev02-readiness.md](docs/manufacturing/rev02-readiness.md)
 
-## 🛠️ Hardware Update 
-### (2025-12-08)
-The first batch arrived today. I am pleased that every single functionality works.
-![uConsole HAM Radio HAT - first batch](/Pictures/IMG_9012.jpeg)
+## Hardware Timeline
 
-### (2025-11-11)
+2025-10-30:
+- PCB design completed for first prototype submission.
 
-While the **first prototype** is being manufactured by **PCBWay**, I’ve made a few **minor improvements** to the design — primarily noted by my enclosure CAD work and manufacturing feedback.
+2025-11-01:
+- Proof-of-concept validation completed using SA818 + SRFRS.
 
-This revision will use a **4-layer PCB** instead of the original 6-layer design. I’ll be experimenting with this to evaluate whether it provides sufficient signal integrity and isolation.
+2025-11-11:
+- Design iteration applied:
+  - SMA switched to panel mount.
+  - USB connector switched to horizontal.
+  - BOM updated with MPNs and minor value/package refinements.
 
-####  Design Changes
--  **SMA connector** changed to a **panel-mount** version for improved mechanical strength and enclosure fit.  
--  **USB connector** changed from **vertical** to **horizontal** orientation for better cable clearance.  
--  **BOM updated** — now includes full **Manufacturer Part Numbers (MPNs)** to streamline fabrication and assembly.  
--  **Component updates:** minor changes in package size and component values based on PCB manufacturer feedback (no functional impact).
+2025-12-08:
+- First batch received and basic functional checks passed.
 
----
-![uConsole HAM Radio HAT - rev01](/Pictures/Screenshot%202025-11-11%20223535.png)
+![uConsole HAM HAT first batch](Pictures/IMG_9012.jpeg)
 
-> These refinements aim to simplify production, improve mechanical integration, and test a more cost-effective 4-layer configuration without compromising RF or audio performance.
+## Safety and Compliance
 
-
-
-
-### (2025-11-01)
-I used an original Digirig I had on hand to connect one of the SA818S modules I received from NiceRF in order to test the proof of concept (POC) before proceeding with the PCB order. I used the program from [SRFRS](https://github.com/jumbo5566/SRFRS). All OK.
-
-### (2025-10-30)
-
-The **PCB design is complete**, and I’m performing final checks before submitting the first production batch.
-
-![uConsole HAM Radio HAT PCB](/Pictures/uConsole_HAM_HAT_PCB_render.png)
-
-
----
-
-## 📡 Status
-
-- ✅ Hardware design finalized  
-- 🔄 Firmware and software integration in progress  
-- 🚀 Initial board order planned for early November 2025
-
----
-
-## ⚙️ Future Plans
-
-- Add 70 cm band support  
-- Optional GPS and APRS integration  
-- Extended software control through uConsole UI  
-
----
-
-## 📞 Contact
-
-For collaboration, testing, or feedback, please open a GitHub issue or contact the maintainer directly.
-
----
+- Operate only on frequencies allowed by your license and jurisdiction.
+- Use proper antenna/load and avoid uncontrolled transmissions during bench tests.
+- Confirm local regulations before on-air testing.

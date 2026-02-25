@@ -29,7 +29,7 @@
   "aprs_comment": "uConsole HAM HAT",
   "aprs_rx_input": "27: Microphone (2- USB Audio Device)",
   "aprs_rx_duration": "10",
-  "aprs_rx_chunk": "4.0",
+  "aprs_rx_chunk": "8.0",
   "aprs_rx_auto": false,
   "aprs_tx_gain": "0.34",
   "aprs_preamble_flags": "240",
@@ -44,5 +44,7 @@
   "ptt_active_high": true,
   "ptt_pre_ms": "400",
   "ptt_post_ms": "120",
-  "chat_intro_note": "uConsole HAM HAT online"
+  "chat_intro_note": "uConsole HAM HAT online",
+  "aprs_rx_trim_db": -12.0,
+  "aprs_rx_os_level": 35
 }

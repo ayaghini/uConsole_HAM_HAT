@@ -12,6 +12,7 @@ import sys
 import threading
 import wave
 import webbrowser
+from ctypes import POINTER, cast
 from datetime import datetime
 from pathlib import Path
 from time import sleep
@@ -50,6 +51,19 @@ from audio_tools import (
     write_test_tone_wav,
 )
 from sa818_client import RadioConfig, SA818Client, SA818Error
+
+try:
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, DEVICE_STATE, EDataFlow, IAudioEndpointVolume
+
+    HAS_PYCAW = True
+except Exception:
+    AudioUtilities = None
+    DEVICE_STATE = None
+    EDataFlow = None
+    IAudioEndpointVolume = None
+    CLSCTX_ALL = None
+    HAS_PYCAW = False
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -132,7 +146,10 @@ class HamHatControlApp(tk.Tk):
         self.aprs_comment_var = tk.StringVar(value="uConsole HAM HAT")
         self.aprs_rx_input_var = tk.StringVar(value="Default")
         self.aprs_rx_duration_var = tk.StringVar(value="10")
-        self.aprs_rx_chunk_var = tk.StringVar(value="4.0")
+        self.aprs_rx_chunk_var = tk.StringVar(value="8.0")
+        self.aprs_rx_trim_db_var = tk.DoubleVar(value=-12.0)
+        self.aprs_rx_os_level_var = tk.IntVar(value=35)
+        self.aprs_rx_clip_var = tk.StringVar(value="0.0%")
         self.aprs_rx_auto_var = tk.BooleanVar(value=False)
         # Baseline defaults validated over-the-air with handheld decode.
         self.aprs_tx_gain_var = tk.StringVar(value="0.34")
@@ -155,6 +172,8 @@ class HamHatControlApp(tk.Tk):
         self._rx_chunk_floor_logged = False
         self._last_rx_text = ""
         self._last_rx_time = 0.0
+        self._recent_rx_times: dict[str, float] = {}
+        self._rx_saved_squelch: str | None = None
         self._ui_queue: queue.Queue[tuple[str, str, str | None]] = queue.Queue()
         self._ack_condition = threading.Condition()
         self._acked_message_ids: set[str] = set()
@@ -428,25 +447,54 @@ class HamHatControlApp(tk.Tk):
         rx.pack(fill="x", pady=(8, 0))
         self._row(rx, "Capture Sec", ttk.Entry(rx, textvariable=self.aprs_rx_duration_var, width=8), 0)
         self._row(rx, "Chunk Sec", ttk.Entry(rx, textvariable=self.aprs_rx_chunk_var, width=8), 1)
+        trim_row = ttk.Frame(rx)
+        trim_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        trim_row.columnconfigure(1, weight=1)
+        ttk.Label(trim_row, text="RX Trim (dB)").grid(row=0, column=0, sticky="w")
+        ttk.Scale(
+            trim_row,
+            variable=self.aprs_rx_trim_db_var,
+            from_=-30.0,
+            to=0.0,
+            orient="horizontal",
+        ).grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        ttk.Label(trim_row, textvariable=self.aprs_rx_trim_db_var, width=6).grid(row=0, column=2, sticky="e")
+        ttk.Label(trim_row, text="Input Clip").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(trim_row, textvariable=self.aprs_rx_clip_var).grid(row=1, column=1, sticky="w", pady=(2, 0))
+        os_row = ttk.Frame(rx)
+        os_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        os_row.columnconfigure(1, weight=1)
+        ttk.Label(os_row, text="OS Mic Level").grid(row=0, column=0, sticky="w")
+        ttk.Scale(
+            os_row,
+            variable=self.aprs_rx_os_level_var,
+            from_=1,
+            to=100,
+            orient="horizontal",
+        ).grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        ttk.Label(os_row, textvariable=self.aprs_rx_os_level_var, width=4).grid(row=0, column=2, sticky="e")
+        ttk.Button(os_row, text="Apply OS Level", command=self.apply_os_rx_level).grid(
+            row=0, column=3, sticky="e", padx=(8, 0)
+        )
         ttk.Checkbutton(
             rx,
             text="Always-on RX Monitor",
             variable=self.aprs_rx_auto_var,
             command=self._on_auto_rx_toggle,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
         ttk.Checkbutton(
             rx,
             text="Auto-ACK direct messages",
             variable=self.aprs_auto_ack_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w")
+        ).grid(row=5, column=0, columnspan=2, sticky="w")
         ttk.Button(rx, text="One-Shot Decode", command=self.receive_aprs_capture).grid(
-            row=4, column=0, sticky="ew", pady=(8, 0)
+            row=6, column=0, sticky="ew", pady=(8, 0)
         )
         ttk.Button(rx, text="Start Monitor", command=self.start_rx_monitor).grid(
-            row=4, column=1, sticky="ew", pady=(8, 0), padx=(8, 0)
+            row=6, column=1, sticky="ew", pady=(8, 0), padx=(8, 0)
         )
         ttk.Button(rx, text="Stop Monitor", command=self.stop_rx_monitor).grid(
-            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+            row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0)
         )
 
         map_box = ttk.LabelFrame(right, text="Stations Map (Offline)", padding=8)
@@ -1662,6 +1710,8 @@ class HamHatControlApp(tk.Tk):
                     self.input_level_var.set(max(0.0, min(1.0, float(a))))
                 elif kind == "meter_out":
                     self.output_level_var.set(max(0.0, min(1.0, float(a))))
+                elif kind == "rx_clip":
+                    self.aprs_rx_clip_var.set(a)
                 elif kind == "wf_row":
                     self._push_waterfall_row(a)
                 elif kind == "heard_station":
@@ -1713,6 +1763,9 @@ class HamHatControlApp(tk.Tk):
 
     def _queue_waterfall_row(self, row: str) -> None:
         self._ui_queue.put(("wf_row", row, None))
+
+    def _queue_rx_clip(self, clip_percent: float) -> None:
+        self._ui_queue.put(("rx_clip", f"{max(0.0, clip_percent):.1f}%", None))
 
     def _queue_heard_station(self, call: str) -> None:
         self._ui_queue.put(("heard_station", call, None))
@@ -1780,6 +1833,75 @@ class HamHatControlApp(tk.Tk):
             return 0.0
         x = np.asarray(mono, dtype=np.float32).reshape(-1)
         return float(np.sqrt(np.mean(x * x)))
+
+    @staticmethod
+    def _clip_percent(mono: np.ndarray) -> float:
+        x = np.asarray(mono, dtype=np.float32).reshape(-1)
+        if len(x) == 0:
+            return 0.0
+        return float(np.mean(np.abs(x) >= 0.98) * 100.0)
+
+    def _rx_trimmed_samples(self, mono: np.ndarray) -> np.ndarray:
+        x = np.asarray(mono, dtype=np.float32).reshape(-1)
+        try:
+            db = float(self.aprs_rx_trim_db_var.get())
+        except Exception:
+            db = -12.0
+        db = min(0.0, max(-30.0, db))
+        gain = float(10.0 ** (db / 20.0))
+        y = np.clip(x * gain, -1.0, 1.0)
+        return y.astype(np.float32, copy=False)
+
+    def apply_os_rx_level(self) -> None:
+        if platform.system().lower() != "windows":
+            messagebox.showerror("OS Mic Level", "OS-level mic control is available on Windows only")
+            return
+        if not HAS_PYCAW:
+            messagebox.showerror(
+                "OS Mic Level",
+                "Missing backend: install with `python -m pip install pycaw comtypes`.",
+            )
+            return
+        selected = self.aprs_rx_input_var.get().strip()
+        if not selected or selected == "Default":
+            messagebox.showerror("OS Mic Level", "Select an APRS Audio Input first")
+            return
+        level = max(1, min(100, int(self.aprs_rx_os_level_var.get())))
+        target_name = self._entry_name(selected)
+        target_norm = self._normalize_audio_name(target_name)
+        target_token = self._usb_audio_token(target_name)
+        try:
+            enum = AudioUtilities.GetDeviceEnumerator()
+            coll = enum.EnumAudioEndpoints(EDataFlow.eCapture.value, DEVICE_STATE.ACTIVE.value)
+            count = coll.GetCount()
+            best = None
+            for i in range(count):
+                dev = coll.Item(i)
+                ad = AudioUtilities.CreateDevice(dev)
+                friendly = str(ad.FriendlyName)
+                fn = self._normalize_audio_name(friendly)
+                tok = self._usb_audio_token(friendly)
+                score = 0
+                if fn == target_norm:
+                    score += 10
+                if target_token and tok == target_token:
+                    score += 6
+                if target_token and target_token in fn:
+                    score += 3
+                if "usb audio device" in fn and "usb audio device" in target_norm:
+                    score += 1
+                if best is None or score > best[0]:
+                    best = (score, dev, friendly)
+            if best is None or best[0] <= 0:
+                raise RuntimeError(f"No matching OS capture endpoint for '{target_name}'")
+            _, dev, friendly = best
+            iface = dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            vol = cast(iface, POINTER(IAudioEndpointVolume))
+            vol.SetMute(0, None)
+            vol.SetMasterVolumeLevelScalar(float(level) / 100.0, None)
+            self._aprs_log(f"OS mic level set to {level}% on '{friendly}'")
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("OS Mic Level", str(exc))
 
     def _spectrum_row_from_samples(self, rate: int, mono: np.ndarray) -> str:
         x = np.asarray(mono, dtype=np.float32).reshape(-1)
@@ -2049,7 +2171,6 @@ class HamHatControlApp(tk.Tk):
             trailing_flags=16,
         )
         self._transmit_aprs_wav_worker(wav_path, cfg, f"APRS {tag}")
-        self._aprs_log(f"TX {source}>{destination},{path}:{payload}")
 
     def _transmit_aprs_wav_worker(self, wav_path: Path, cfg: dict[str, object], label: str) -> None:
         port = self.port_var.get().strip()
@@ -2575,7 +2696,16 @@ class HamHatControlApp(tk.Tk):
                 self._aprs_log(f"RX capture started ({secs:.1f}s) to {wav_path}")
                 with self._audio_lock:
                     self._record_wav_compatible(wav_path, seconds=secs, device_index=dev)
-                packets = decode_ax25_from_wav(str(wav_path))
+                with wave.open(str(wav_path), "rb") as wavf:
+                    rate = int(wavf.getframerate())
+                    channels = int(wavf.getnchannels())
+                    frames = wavf.readframes(wavf.getnframes())
+                mono = np.frombuffer(frames, dtype=np.int16)
+                if channels > 1:
+                    mono = mono.reshape(-1, channels)[:, 0]
+                mono_f = mono.astype(np.float32) / 32768.0
+                self._queue_rx_clip(self._clip_percent(mono_f))
+                packets = decode_ax25_from_samples(rate, self._rx_trimmed_samples(mono_f))
                 if not packets:
                     self._aprs_log("RX decode: no APRS packets found")
                     return
@@ -2594,6 +2724,7 @@ class HamHatControlApp(tk.Tk):
         if self._rx_monitor_running:
             self._aprs_log("RX monitor already running")
             return
+        self._prepare_radio_for_rx_monitor()
         self._rx_monitor_running = True
         self._rx_overlap_samples = None
         self._rx_monitor_thread = threading.Thread(target=self._rx_monitor_loop, daemon=True)
@@ -2603,6 +2734,7 @@ class HamHatControlApp(tk.Tk):
     def stop_rx_monitor(self) -> None:
         self._rx_monitor_running = False
         self._rx_overlap_samples = None
+        self._restore_radio_after_rx_monitor()
         self._aprs_log("RX monitor stop requested")
 
     def _on_auto_rx_toggle(self) -> None:
@@ -2611,19 +2743,75 @@ class HamHatControlApp(tk.Tk):
         else:
             self.stop_rx_monitor()
 
+    def _prepare_radio_for_rx_monitor(self) -> None:
+        if not self.client.connected:
+            return
+        try:
+            if self._rx_saved_squelch is None:
+                self._rx_saved_squelch = self.squelch_var.get().strip()
+            freq = float(self.frequency_var.get().strip())
+            bw = 1 if self.bandwidth_var.get() == "Wide" else 0
+            self.client.set_radio(
+                RadioConfig(
+                    frequency=freq,
+                    offset=0.0,
+                    bandwidth=bw,
+                    squelch=0,
+                    ctcss_tx=None,
+                    ctcss_rx=None,
+                    dcs_tx=None,
+                    dcs_rx=None,
+                )
+            )
+            try:
+                self.client.set_filters(True, True, True)
+            except Exception:
+                pass
+            self._aprs_log("RX monitor prep: SA818 squelch forced to 0 with flat filters")
+        except Exception as exc:  # noqa: BLE001
+            self._aprs_log(f"RX monitor prep warning: {exc}")
+
+    def _restore_radio_after_rx_monitor(self) -> None:
+        if not self.client.connected:
+            self._rx_saved_squelch = None
+            return
+        try:
+            if self._rx_saved_squelch is None:
+                return
+            sq = int(self._rx_saved_squelch)
+            freq = float(self.frequency_var.get().strip())
+            bw = 1 if self.bandwidth_var.get() == "Wide" else 0
+            self.client.set_radio(
+                RadioConfig(
+                    frequency=freq,
+                    offset=0.0,
+                    bandwidth=bw,
+                    squelch=max(0, min(8, sq)),
+                    ctcss_tx=None,
+                    ctcss_rx=None,
+                    dcs_tx=None,
+                    dcs_rx=None,
+                )
+            )
+            self._aprs_log(f"RX monitor stop: restored squelch to {max(0, min(8, sq))}")
+        except Exception as exc:  # noqa: BLE001
+            self._aprs_log(f"RX monitor restore warning: {exc}")
+        finally:
+            self._rx_saved_squelch = None
+
     def _rx_monitor_loop(self) -> None:
         while self._rx_monitor_running:
             try:
                 chunk = float(self.aprs_rx_chunk_var.get().strip())
                 if chunk <= 0:
                     chunk = 2.0
-                if platform.system().lower() == "windows" and chunk < 4.0:
+                if platform.system().lower() == "windows" and chunk < 8.0:
                     # Worker-based capture has non-trivial process startup overhead on Windows.
                     # Use a larger chunk to reduce dead-time between captures and improve RX hit rate.
-                    chunk = 4.0
+                    chunk = 8.0
                     if not self._rx_chunk_floor_logged:
                         self._rx_chunk_floor_logged = True
-                        self._aprs_log("RX monitor: Windows minimum chunk forced to 4.0s for reliability")
+                        self._aprs_log("RX monitor: Windows minimum chunk forced to 8.0s for reliability")
                 dev = self._selected_input_device()
                 if not self._audio_lock.acquire(timeout=0.15):
                     sleep(0.05)
@@ -2632,6 +2820,8 @@ class HamHatControlApp(tk.Tk):
                     rate, mono = self._capture_samples_compatible(seconds=chunk, device_index=dev)
                 finally:
                     self._audio_lock.release()
+                self._queue_rx_clip(self._clip_percent(mono))
+                mono = self._rx_trimmed_samples(mono)
                 # Keep spectrum/meter live from the same captured block used for decode.
                 in_level = min(1.0, self._level_from_samples(mono) * 8.0)
                 self._queue_input_level(in_level)
@@ -2645,11 +2835,20 @@ class HamHatControlApp(tk.Tk):
                 self._rx_overlap_samples = decode_samples[-keep:].copy()
 
                 packets = decode_ax25_from_samples(rate, decode_samples)
+                dedupe_window_s = max(2.0, chunk + 1.0)
                 for pkt in packets:
                     now_ts = datetime.now().timestamp()
-                    # Suppress immediate duplicates only (same decode repeated from overlap).
-                    if pkt.text == self._last_rx_text and (now_ts - self._last_rx_time) < 2.0:
+                    last_seen = self._recent_rx_times.get(pkt.text)
+                    # Suppress duplicate decodes from overlap/repeated digipeat echoes in short window.
+                    if last_seen is not None and (now_ts - last_seen) < dedupe_window_s:
                         continue
+                    self._recent_rx_times[pkt.text] = now_ts
+                    # Keep memory bounded during long monitor runs.
+                    if len(self._recent_rx_times) > 600:
+                        cutoff = now_ts - max(30.0, dedupe_window_s * 2.0)
+                        self._recent_rx_times = {
+                            text: ts for text, ts in self._recent_rx_times.items() if ts >= cutoff
+                        }
                     self._last_rx_text = pkt.text
                     self._last_rx_time = now_ts
                     self._aprs_log(f"RX {pkt.text}")
@@ -2711,6 +2910,8 @@ class HamHatControlApp(tk.Tk):
             "aprs_rx_input": self.aprs_rx_input_var.get(),
             "aprs_rx_duration": self.aprs_rx_duration_var.get(),
             "aprs_rx_chunk": self.aprs_rx_chunk_var.get(),
+            "aprs_rx_trim_db": float(self.aprs_rx_trim_db_var.get()),
+            "aprs_rx_os_level": int(self.aprs_rx_os_level_var.get()),
             "aprs_rx_auto": self.aprs_rx_auto_var.get(),
             "aprs_tx_gain": self.aprs_tx_gain_var.get(),
             "aprs_preamble_flags": self.aprs_preamble_flags_var.get(),
@@ -2768,7 +2969,15 @@ class HamHatControlApp(tk.Tk):
         self.aprs_comment_var.set(data.get("aprs_comment", "uConsole HAM HAT"))
         self.aprs_rx_input_var.set(data.get("aprs_rx_input", "Default"))
         self.aprs_rx_duration_var.set(data.get("aprs_rx_duration", "10"))
-        self.aprs_rx_chunk_var.set(data.get("aprs_rx_chunk", "2.0"))
+        self.aprs_rx_chunk_var.set(data.get("aprs_rx_chunk", "8.0"))
+        try:
+            self.aprs_rx_trim_db_var.set(float(data.get("aprs_rx_trim_db", -12.0)))
+        except Exception:
+            self.aprs_rx_trim_db_var.set(-12.0)
+        try:
+            self.aprs_rx_os_level_var.set(int(data.get("aprs_rx_os_level", 35)))
+        except Exception:
+            self.aprs_rx_os_level_var.set(35)
         self.aprs_rx_auto_var.set(bool(data.get("aprs_rx_auto", False)))
         self.aprs_tx_gain_var.set(data.get("aprs_tx_gain", "0.34"))
         self.aprs_preamble_flags_var.set(data.get("aprs_preamble_flags", "240"))

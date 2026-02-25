@@ -1,31 +1,35 @@
-﻿# uConsole HAM HAT Control Center (Cross-Platform)
+﻿# uConsole HAM HAT Control Center (Windows)
 
-This folder is the Windows-ready package of the same app used for Raspberry Pi.
+Windows package for the uConsole HAM HAT desktop app.
 
-## Run on Windows
+## Includes
 
-- `run_windows.bat` (Command Prompt)
-- `run_windows.ps1` (PowerShell)
-
-## Build on Windows
-
-- `build_windows.bat`
-
-## App features
-
-- SA818 serial connect/version
+- SA818 serial connect/disconnect and version read
 - Radio setup (frequency/offset/squelch/bandwidth)
 - CTCSS or DCS tone config
 - Filter and volume control
-- APRS send/receive (message + position + ACK)
-- Comms inbox threads (direct and group)
-- Intro discovery packet (`@INTRO`) with location broadcast and auto-contact/map update
+- APRS TX/RX workflows
+- APRS reliable messaging (ACK/retry)
+- Comms contacts/groups/inbox workflows
+- Intro discovery packet (`@INTRO`) and offline station map
+- Audio routing and auto-mapping tools
 - Profile save/load
-- Third-party tool bootstrap (SA818 + SRFRS)
+- Third-party bootstrap (SA818 + SRFRS)
 
-## Callsign convention for dual-device QA
+## Run
 
-- Device 1: `VA7AYG-00`
-- Device 2: `VA7AYG-01`
+- `run_windows.bat`
+- `run_windows.ps1`
 
-See `QUICK_START_WINDOWS.md` for exact commands.
+## Build
+
+- `build_windows.bat`
+
+EXE output:
+- `dist/ham-hat-control.exe`
+
+## Docs
+
+- Quick start: `QUICK_START_WINDOWS.md`
+- Full user manual: `../../docs/user-manual.md`
+- Functional spec: `../../docs/specifications/functional-specification.md`
