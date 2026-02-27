@@ -206,7 +206,7 @@ class AprsEngine:
             dcs_rx=None,
         )
 
-        # push_config saves user config and applies APRS config
+        # push_config saves current config (may be RX monitor config if nested) then applies APRS TX config
         self._radio.push_config(aprs_radio)
         wav_path = None
         try:

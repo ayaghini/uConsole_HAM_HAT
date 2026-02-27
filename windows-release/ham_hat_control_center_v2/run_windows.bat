@@ -26,5 +26,18 @@ if not exist ".venv\Scripts\activate.bat" (
     echo Setup complete.
 )
 
+:: Validate core deps; install/repair if missing
+.venv\Scripts\python.exe -c "import sv_ttk" >nul 2>nul
+if errorlevel 1 (
+    echo Missing dependencies detected. Installing requirements...
+    .venv\Scripts\python.exe -m pip install --upgrade pip -q
+    .venv\Scripts\python.exe -m pip install -r requirements.txt -q
+    if errorlevel 1 (
+        echo Failed to install dependencies.
+        pause
+        exit /b 1
+    )
+)
+
 :: Launch app
 .venv\Scripts\python.exe main.py %*

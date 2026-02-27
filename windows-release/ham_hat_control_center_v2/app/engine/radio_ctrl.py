@@ -22,7 +22,7 @@ class RadioController:
     def __init__(self) -> None:
         self._client = SA818Client()
         self._lock = threading.RLock()
-        self._saved_config: Optional[RadioConfig] = None
+        self._config_stack: list[RadioConfig] = []  # LIFO; replaces single _saved_config slot
         self._current_config: Optional[RadioConfig] = None
         self._on_connect_cb: Optional[Callable[[str], None]] = None
         self._on_disconnect_cb: Optional[Callable[[], None]] = None
@@ -56,14 +56,14 @@ class RadioController:
     def connect(self, port: str, baud: int = 9600, timeout: float = 2.0) -> None:
         with self._lock:
             self._client.connect(port, baud=baud, timeout=timeout)
-            self._saved_config = None
+            self._config_stack.clear()
             self._current_config = None
         if self._on_connect_cb:
             self._on_connect_cb(port)
 
     def disconnect(self) -> None:
         with self._lock:
-            self._saved_config = None
+            self._config_stack.clear()
             self._current_config = None
             self._client.disconnect()
         if self._on_disconnect_cb:
@@ -92,24 +92,25 @@ class RadioController:
             return reply
 
     def push_config(self, cfg: RadioConfig) -> str:
-        """Save current config (if any) then apply new one.
+        """Push current config onto the stack, then apply cfg.
 
-        Use pop_config() to restore. Useful for temporary TX/RX setups.
+        Stack-safe (LIFO): nested push/pop calls are supported, so RX monitor
+        and TX/auto-ACK can each push/pop without clobbering each other.
+        Use pop_config() to restore.
         """
         with self._lock:
-            if self._saved_config is None and self._current_config is not None:
-                self._saved_config = self._current_config.clone()
+            if self._current_config is not None:
+                self._config_stack.append(self._current_config.clone())
             reply = self._client.set_radio(cfg)
             self._current_config = cfg.clone()
             return reply
 
     def pop_config(self) -> Optional[str]:
-        """Restore previously saved config. Returns reply or None if no saved config."""
+        """Restore most recently pushed config (LIFO). Returns reply or None if stack empty."""
         with self._lock:
-            if self._saved_config is None:
+            if not self._config_stack:
                 return None
-            cfg = self._saved_config
-            self._saved_config = None
+            cfg = self._config_stack.pop()
             try:
                 reply = self._client.set_radio(cfg)
                 self._current_config = cfg.clone()
@@ -119,7 +120,7 @@ class RadioController:
 
     def has_saved_config(self) -> bool:
         with self._lock:
-            return self._saved_config is not None
+            return bool(self._config_stack)
 
     # ------------------------------------------------------------------
     # Delegated SA818 commands

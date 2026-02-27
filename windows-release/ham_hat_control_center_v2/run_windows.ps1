@@ -32,6 +32,21 @@ try {
         Write-Host "Setup complete." -ForegroundColor Green
     }
 
+    # Repair deps if a stale venv is missing requirements
+    $depsOk = $true
+    try {
+        & $venvPy -c "import sv_ttk" | Out-Null
+    }
+    catch {
+        $depsOk = $false
+    }
+
+    if (-not $depsOk) {
+        Write-Host "Missing dependencies detected. Installing requirements..." -ForegroundColor Yellow
+        & $venvPy -m pip install --upgrade pip -q
+        & $venvPy -m pip install -r requirements.txt -q
+    }
+
     # Launch
     & $venvPy main.py @args
 }
