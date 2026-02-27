@@ -52,7 +52,7 @@ class AppState:
         self.aprs_dest_var = tk.StringVar(value="APRS")
         self.aprs_path_var = tk.StringVar(value="WIDE1-1")
         self.aprs_tx_gain_var = tk.StringVar(value="0.34")
-        self.aprs_preamble_var = tk.StringVar(value="240")
+        self.aprs_preamble_var = tk.StringVar(value="60")
         self.aprs_repeats_var = tk.StringVar(value="1")
         self.aprs_reinit_var = tk.BooleanVar(value=True)
         self.aprs_symbol_table_var = tk.StringVar(value="/")

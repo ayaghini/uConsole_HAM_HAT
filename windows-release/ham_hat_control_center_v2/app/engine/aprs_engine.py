@@ -114,9 +114,9 @@ class AprsEngine:
         self._ack_condition = threading.Condition()
         self._acked_ids: set[str] = set()
 
-        # Duplicate suppression: OrderedDict keyed by pkt.text → timestamp
+        # Duplicate suppression: OrderedDict keyed by hash(pkt.text) → timestamp
         self._seen_lock = threading.Lock()
-        self._seen_msgs: "OrderedDict[str, float]" = OrderedDict()
+        self._seen_msgs: "OrderedDict[int, float]" = OrderedDict()
         self._seen_direct_ids: "OrderedDict[str, float]" = OrderedDict()
 
         # Callbacks (called from worker threads → UI must marshal via after())
@@ -208,6 +208,7 @@ class AprsEngine:
 
         # push_config saves user config and applies APRS config
         self._radio.push_config(aprs_radio)
+        wav_path = None
         try:
             try:
                 self._radio.set_filters(True, True, True)
@@ -246,6 +247,12 @@ class AprsEngine:
                     self._log("Radio config restored after TX")
             except Exception as exc:
                 self._log(f"Radio restore warning after TX: {exc}")
+            # Remove temporary TX WAV to prevent unbounded audio_out/ growth
+            if wav_path is not None:
+                try:
+                    wav_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------
     # Reliable TX (ACK/retry)
@@ -422,11 +429,16 @@ class AprsEngine:
                     self._on_rx_clip(clip_pct)
 
                 mono_trimmed = _apply_trim_db(mono, trim_db)
-                in_level = min(1.0, float(np.sqrt(np.mean(mono_trimmed * mono_trimmed))) * 8.0)
+                rms = float(np.sqrt(np.mean(mono_trimmed * mono_trimmed)))
+                in_level = min(1.0, rms * 8.0)
                 if self._on_input_level:
                     self._on_input_level(in_level)
                 if self._on_waterfall:
                     self._on_waterfall(mono_trimmed, rate)
+
+                # Energy gate: skip DSP on silent chunks (RMS < -60 dBFS)
+                if rms < 0.001:
+                    continue
 
                 # Decode with overlap from previous chunk
                 overlap = self._rx_overlap
@@ -439,13 +451,14 @@ class AprsEngine:
                 dedupe_window = max(2.0, effective_chunk + 1.0)
 
                 for pkt in packets:
+                    pkt_key = hash(pkt.text)
                     with self._seen_lock:
-                        last_seen = self._seen_msgs.get(pkt.text)
+                        last_seen = self._seen_msgs.get(pkt_key)
                         if last_seen is not None and (now_ts - last_seen) < dedupe_window:
                             continue
                         # Update dedup dict (time-ordered; prune old entries)
-                        self._seen_msgs[pkt.text] = now_ts
-                        self._seen_msgs.move_to_end(pkt.text)
+                        self._seen_msgs[pkt_key] = now_ts
+                        self._seen_msgs.move_to_end(pkt_key)
                         if len(self._seen_msgs) > 600:
                             cutoff = now_ts - max(30.0, dedupe_window * 2.0)
                             keys_to_del = [k for k, ts in self._seen_msgs.items() if ts < cutoff]
@@ -518,8 +531,8 @@ class AprsEngine:
         """
         result: dict = {}
 
-        # Position
-        pos = parse_aprs_position_info(pkt.info)
+        # Position (pass destination for Mic-E decoding)
+        pos = parse_aprs_position_info(pkt.info, destination=pkt.destination)
         if pos:
             result["position"] = pos  # (lat, lon, comment)
 

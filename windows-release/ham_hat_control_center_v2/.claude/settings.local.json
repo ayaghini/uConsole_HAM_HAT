@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/Yaghi/OneDrive/Documents/uConsole_HAM_HAT/uConsole_HAM_HAT/docs/specifications/**)"
+      "Read(//c/Users/Yaghi/OneDrive/Documents/uConsole_HAM_HAT/uConsole_HAM_HAT/docs/specifications/**)",
+      "Bash(python -m compileall -q .)"
     ]
   }
 }

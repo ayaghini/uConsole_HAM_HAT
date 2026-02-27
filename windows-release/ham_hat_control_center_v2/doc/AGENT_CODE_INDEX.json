@@ -1,0 +1,6823 @@
+{
+  "project": "HAM HAT Control Center v2",
+  "generated_by": "scripts/generate_agent_onboarding_pack.py",
+  "root": "C:\\Users\\Yaghi\\OneDrive\\Documents\\uConsole_HAM_HAT\\uConsole_HAM_HAT\\windows-release\\ham_hat_control_center_v2",
+  "summary": {
+    "python_files": 28,
+    "top_level_functions": 114,
+    "classes": 61,
+    "class_methods": 284
+  },
+  "root_files_present": [
+    "main.py",
+    "requirements.txt",
+    "VERSION",
+    "AGENT_CONTEXT.json",
+    "PROJECT_COMPONENT_MAP.md"
+  ],
+  "component_groups": {
+    "app_core": [
+      "app/__init__.py",
+      "app/app.py",
+      "app/app_state.py"
+    ],
+    "engine": [
+      "app/engine/__init__.py",
+      "app/engine/aprs_engine.py",
+      "app/engine/aprs_modem.py",
+      "app/engine/audio_router.py",
+      "app/engine/audio_tools.py",
+      "app/engine/comms_mgr.py",
+      "app/engine/models.py",
+      "app/engine/profile.py",
+      "app/engine/radio_ctrl.py",
+      "app/engine/sa818_client.py"
+    ],
+    "ui": [
+      "app/ui/__init__.py",
+      "app/ui/aprs_tab.py",
+      "app/ui/comms_tab.py",
+      "app/ui/events.py",
+      "app/ui/main_tab.py",
+      "app/ui/setup_tab.py",
+      "app/ui/widgets.py"
+    ],
+    "scripts": [
+      "scripts/bootstrap_third_party.py",
+      "scripts/capture_wav_worker.py",
+      "scripts/generate_agent_onboarding_pack.py",
+      "scripts/play_wav_worker.py",
+      "scripts/rx_score_worker.py",
+      "scripts/two_radio_diagnostic.py",
+      "scripts/tx_wav_worker.py"
+    ],
+    "entry": [
+      "main.py"
+    ]
+  },
+  "files": [
+    {
+      "path": "app/__init__.py",
+      "bytes": 0,
+      "lines": 1,
+      "module_doc": "",
+      "imports": [],
+      "constants": [],
+      "functions": [],
+      "classes": []
+    },
+    {
+      "path": "app/app.py",
+      "bytes": 48990,
+      "lines": 1247,
+      "module_doc": "HamHatApp \u2014 main application window.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "",
+          "names": [
+            "logging"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "",
+          "names": [
+            "os"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "queue"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "",
+          "names": [
+            "subprocess"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "dataclasses",
+          "names": [
+            "dataclass",
+            "field"
+          ],
+          "lineno": 21
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 22
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 23
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 25
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "messagebox",
+            "ttk"
+          ],
+          "lineno": 26
+        },
+        {
+          "module": "",
+          "names": [
+            "sv_ttk"
+          ],
+          "lineno": 27
+        },
+        {
+          "module": "app_state",
+          "names": [
+            "AppState"
+          ],
+          "lineno": 29
+        },
+        {
+          "module": "engine.aprs_engine",
+          "names": [
+            "AprsEngine",
+            "_TxSnapshot"
+          ],
+          "lineno": 30
+        },
+        {
+          "module": "engine.aprs_modem",
+          "names": [
+            "build_aprs_message_payload",
+            "build_aprs_position_payload",
+            "write_aprs_wav",
+            "write_test_tone_wav"
+          ],
+          "lineno": 31
+        },
+        {
+          "module": "engine.audio_router",
+          "names": [
+            "AudioRouter"
+          ],
+          "lineno": 37
+        },
+        {
+          "module": "engine.audio_tools",
+          "names": [
+            "list_input_devices",
+            "list_output_devices"
+          ],
+          "lineno": 38
+        },
+        {
+          "module": "engine.comms_mgr",
+          "names": [
+            "CommsManager"
+          ],
+          "lineno": 39
+        },
+        {
+          "module": "engine.models",
+          "names": [
+            "AppProfile",
+            "AprsConfig",
+            "AudioConfig",
+            "ChatMessage",
+            "DecodedPacket",
+            "MSG_ID_COUNTER",
+            "PttConfig",
+            "RadioConfig",
+            "ReliableConfig"
+          ],
+          "lineno": 40
+        },
+        {
+          "module": "engine.profile",
+          "names": [
+            "ProfileManager"
+          ],
+          "lineno": 51
+        },
+        {
+          "module": "engine.radio_ctrl",
+          "names": [
+            "RadioController"
+          ],
+          "lineno": 52
+        },
+        {
+          "module": "engine.sa818_client",
+          "names": [
+            "SA818Error"
+          ],
+          "lineno": 53
+        },
+        {
+          "module": "ui.aprs_tab",
+          "names": [
+            "AprsTab"
+          ],
+          "lineno": 54
+        },
+        {
+          "module": "ui.comms_tab",
+          "names": [
+            "CommsTab"
+          ],
+          "lineno": 55
+        },
+        {
+          "module": "ui.main_tab",
+          "names": [
+            "MainTab"
+          ],
+          "lineno": 56
+        },
+        {
+          "module": "ui.setup_tab",
+          "names": [
+            "SetupTab"
+          ],
+          "lineno": 57
+        }
+      ],
+      "constants": [
+        "_VERSION_FILE"
+      ],
+      "functions": [
+        {
+          "name": "_read_version",
+          "lineno": 64,
+          "end_lineno": 68,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "_LogEvt",
+          "lineno": 76,
+          "end_lineno": 76,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_AprsLogEvt",
+          "lineno": 78,
+          "end_lineno": 78,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_ErrorEvt",
+          "lineno": 80,
+          "end_lineno": 80,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_ConnectEvt",
+          "lineno": 82,
+          "end_lineno": 82,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_DisconnectEvt",
+          "lineno": 84,
+          "end_lineno": 84,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_PacketEvt",
+          "lineno": 86,
+          "end_lineno": 86,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_AudioPairEvt",
+          "lineno": 88,
+          "end_lineno": 88,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_InputLevelEvt",
+          "lineno": 90,
+          "end_lineno": 90,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_OutputLevelEvt",
+          "lineno": 92,
+          "end_lineno": 92,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_WaterfallEvt",
+          "lineno": 94,
+          "end_lineno": 94,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_RxClipEvt",
+          "lineno": 96,
+          "end_lineno": 96,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_HeardEvt",
+          "lineno": 98,
+          "end_lineno": 98,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_ChatMsgEvt",
+          "lineno": 100,
+          "end_lineno": 100,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_ContactsEvt",
+          "lineno": 102,
+          "end_lineno": 102,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_StatusEvt",
+          "lineno": 104,
+          "end_lineno": 104,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_SuggestRxOsLevelEvt",
+          "lineno": 106,
+          "end_lineno": 106,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "HamHatApp",
+          "lineno": 109,
+          "end_lineno": 1246,
+          "bases": [
+            "tk.Tk"
+          ],
+          "decorators": [],
+          "doc": "Main application window \u2014 thin coordinator between engine and tabs.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 116,
+              "end_lineno": 200,
+              "args": [
+                "self",
+                "app_dir"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_ui",
+              "lineno": 206,
+              "end_lineno": 242,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_wire_callbacks",
+              "lineno": 248,
+              "end_lineno": 263,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_wire_comms",
+              "lineno": 265,
+              "end_lineno": 270,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_drain_queue",
+              "lineno": 276,
+              "end_lineno": 284,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_dispatch",
+              "lineno": 286,
+              "end_lineno": 343,
+              "args": [
+                "self",
+                "evt"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_vis_tick",
+              "lineno": 349,
+              "end_lineno": 360,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_startup_auto_tasks",
+              "lineno": 366,
+              "end_lineno": 372,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_auto_find_audio_background",
+              "lineno": 374,
+              "end_lineno": 394,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "connect",
+              "lineno": 400,
+              "end_lineno": 417,
+              "args": [
+                "self",
+                "port"
+              ],
+              "decorators": [],
+              "doc": "Connect to SA818 on given port (called from main thread)."
+            },
+            {
+              "name": "_apply_radio_after_connect",
+              "lineno": 419,
+              "end_lineno": 421,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "disconnect",
+              "lineno": 423,
+              "end_lineno": 431,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "scan_ports",
+              "lineno": 433,
+              "end_lineno": 439,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Return list of available serial port names (called on main thread)."
+            },
+            {
+              "name": "auto_identify_and_connect",
+              "lineno": 441,
+              "end_lineno": 456,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Probe all COM ports in background thread; connect to first SA818 found."
+            },
+            {
+              "name": "apply_radio",
+              "lineno": 462,
+              "end_lineno": 468,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Read radio params from main tab and apply to SA818."
+            },
+            {
+              "name": "_apply_radio_config",
+              "lineno": 470,
+              "end_lineno": 498,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_filters",
+              "lineno": 500,
+              "end_lineno": 511,
+              "args": [
+                "self",
+                "emphasis",
+                "highpass",
+                "lowpass"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_volume",
+              "lineno": 513,
+              "end_lineno": 524,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_tail",
+              "lineno": 526,
+              "end_lineno": 537,
+              "args": [
+                "self",
+                "open_tail"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "refresh_audio_devices",
+              "lineno": 543,
+              "end_lineno": 547,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Called from MainTab to refresh device lists."
+            },
+            {
+              "name": "auto_find_audio_pair",
+              "lineno": 549,
+              "end_lineno": 550,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "stop_audio",
+              "lineno": 552,
+              "end_lineno": 554,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_output_device",
+              "lineno": 556,
+              "end_lineno": 558,
+              "args": [
+                "self",
+                "idx",
+                "name"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_input_device",
+              "lineno": 560,
+              "end_lineno": 562,
+              "args": [
+                "self",
+                "idx",
+                "name"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_callsign_preset",
+              "lineno": 568,
+              "end_lineno": 570,
+              "args": [
+                "self",
+                "src",
+                "dst"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "send_aprs_message",
+              "lineno": 572,
+              "end_lineno": 582,
+              "args": [
+                "self",
+                "to",
+                "text",
+                "reliable"
+              ],
+              "decorators": [],
+              "doc": "Send direct APRS message. When called with no args reads from tab vars."
+            },
+            {
+              "name": "_send_aprs_message_impl",
+              "lineno": 584,
+              "end_lineno": 614,
+              "args": [
+                "self",
+                "to",
+                "text",
+                "reliable"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "send_direct_message",
+              "lineno": 616,
+              "end_lineno": 618,
+              "args": [
+                "self",
+                "to",
+                "text",
+                "reliable"
+              ],
+              "decorators": [],
+              "doc": "Alias used by CommsTab."
+            },
+            {
+              "name": "send_aprs_position",
+              "lineno": 620,
+              "end_lineno": 629,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Read lat/lon/comment from APRS tab vars and send position."
+            },
+            {
+              "name": "apply_os_rx_level",
+              "lineno": 631,
+              "end_lineno": 634,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Read OS mic level from APRS tab var and apply."
+            },
+            {
+              "name": "on_rx_auto_toggle",
+              "lineno": 636,
+              "end_lineno": 641,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Called when the 'Always-on RX Monitor' checkbox is toggled."
+            },
+            {
+              "name": "rx_one_shot",
+              "lineno": 643,
+              "end_lineno": 645,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "One-shot RX decode \u2014 alias for APRS tab button."
+            },
+            {
+              "name": "aprs_log",
+              "lineno": 647,
+              "end_lineno": 649,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": "Log a message to the APRS monitor (called from tab callbacks)."
+            },
+            {
+              "name": "send_group_message",
+              "lineno": 651,
+              "end_lineno": 670,
+              "args": [
+                "self",
+                "group",
+                "text"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "send_position",
+              "lineno": 672,
+              "end_lineno": 685,
+              "args": [
+                "self",
+                "lat",
+                "lon",
+                "comment"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "send_intro",
+              "lineno": 687,
+              "end_lineno": 696,
+              "args": [
+                "self",
+                "note"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "start_rx_monitor",
+              "lineno": 702,
+              "end_lineno": 718,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "stop_rx_monitor",
+              "lineno": 720,
+              "end_lineno": 724,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "one_shot_rx",
+              "lineno": 726,
+              "end_lineno": 731,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "play_test_tone",
+              "lineno": 737,
+              "end_lineno": 741,
+              "args": [
+                "self",
+                "freq",
+                "duration"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "play_manual_aprs_packet",
+              "lineno": 743,
+              "end_lineno": 769,
+              "args": [
+                "self",
+                "text"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "tx_channel_sweep",
+              "lineno": 771,
+              "end_lineno": 794,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Run TX channel sweep to help find the correct audio routing."
+            },
+            {
+              "name": "auto_detect_rx",
+              "lineno": 796,
+              "end_lineno": 826,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Capture a short audio sample and suggest OS mic level."
+            },
+            {
+              "name": "_handle_packet",
+              "lineno": 832,
+              "end_lineno": 904,
+              "args": [
+                "self",
+                "pkt"
+              ],
+              "decorators": [],
+              "doc": "Process a received APRS packet on the main thread."
+            },
+            {
+              "name": "add_contact",
+              "lineno": 910,
+              "end_lineno": 911,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "remove_contact",
+              "lineno": 913,
+              "end_lineno": 914,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "import_heard_to_contacts",
+              "lineno": 916,
+              "end_lineno": 917,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "clear_heard",
+              "lineno": 919,
+              "end_lineno": 921,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_group",
+              "lineno": 923,
+              "end_lineno": 924,
+              "args": [
+                "self",
+                "name",
+                "members"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "delete_group",
+              "lineno": 926,
+              "end_lineno": 927,
+              "args": [
+                "self",
+                "name"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "save_profile",
+              "lineno": 933,
+              "end_lineno": 945,
+              "args": [
+                "self",
+                "path"
+              ],
+              "decorators": [],
+              "doc": "Collect profile from all tabs and save."
+            },
+            {
+              "name": "load_profile",
+              "lineno": 947,
+              "end_lineno": 954,
+              "args": [
+                "self",
+                "path"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "import_profile",
+              "lineno": 956,
+              "end_lineno": 966,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Open a file dialog and apply the chosen profile (called from MainTab button)."
+            },
+            {
+              "name": "export_profile",
+              "lineno": 968,
+              "end_lineno": 979,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Collect current profile and save it to a user-chosen file (called from MainTab button)."
+            },
+            {
+              "name": "reset_defaults",
+              "lineno": 981,
+              "end_lineno": 983,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_load_and_apply_profile",
+              "lineno": 985,
+              "end_lineno": 987,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_apply_profile_to_tabs",
+              "lineno": 989,
+              "end_lineno": 998,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_restore_audio_from_profile",
+              "lineno": 1000,
+              "end_lineno": 1013,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_collect_profile_snapshot",
+              "lineno": 1015,
+              "end_lineno": 1024,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_get_current_profile",
+              "lineno": 1026,
+              "end_lineno": 1031,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Collect a lightweight snapshot for engine calls."
+            },
+            {
+              "name": "_autosave",
+              "lineno": 1033,
+              "end_lineno": 1038,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_make_tx_snapshot",
+              "lineno": 1044,
+              "end_lineno": 1089,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_make_ptt_config",
+              "lineno": 1091,
+              "end_lineno": 1099,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_apply_os_rx_level",
+              "lineno": 1107,
+              "end_lineno": 1127,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_tts_announce",
+              "lineno": 1133,
+              "end_lineno": 1157,
+              "args": [
+                "self",
+                "source",
+                "text"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "run_bootstrap",
+              "lineno": 1163,
+              "end_lineno": 1172,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "run_two_radio_diagnostic",
+              "lineno": 1174,
+              "end_lineno": 1183,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "refresh_ports",
+              "lineno": 1189,
+              "end_lineno": 1195,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Refresh COM port list in the port combobox (main thread)."
+            },
+            {
+              "name": "auto_identify",
+              "lineno": 1197,
+              "end_lineno": 1199,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Auto-identify SA818 \u2014 alias matching MainTab button command."
+            },
+            {
+              "name": "read_version",
+              "lineno": 1201,
+              "end_lineno": 1213,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_set_status",
+              "lineno": 1215,
+              "end_lineno": 1217,
+              "args": [
+                "self",
+                "text"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_close",
+              "lineno": 1223,
+              "end_lineno": 1246,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/app_state.py",
+      "bytes": 3497,
+      "lines": 77,
+      "module_doc": "AppState \u2014 shared application state (tk.Var containers + engine instances).",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "",
+          "names": [
+            "queue"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 7
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "engine.aprs_engine",
+          "names": [
+            "AprsEngine"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "engine.audio_router",
+          "names": [
+            "AudioRouter"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "engine.comms_mgr",
+          "names": [
+            "CommsManager"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "engine.profile",
+          "names": [
+            "ProfileManager"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "engine.radio_ctrl",
+          "names": [
+            "RadioController"
+          ],
+          "lineno": 14
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "AppState",
+          "lineno": 17,
+          "end_lineno": 76,
+          "bases": [],
+          "decorators": [],
+          "doc": "A container for shared application state.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 20,
+              "end_lineno": 76,
+              "args": [
+                "self",
+                "app_dir"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/__init__.py",
+      "bytes": 0,
+      "lines": 1,
+      "module_doc": "",
+      "imports": [],
+      "constants": [],
+      "functions": [],
+      "classes": []
+    },
+    {
+      "path": "app/engine/aprs_engine.py",
+      "bytes": 23930,
+      "lines": 620,
+      "module_doc": "AprsEngine: manages APRS TX, RX monitor, and reliable messaging.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "collections",
+          "names": [
+            "OrderedDict"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "datetime",
+          "names": [
+            "datetime"
+          ],
+          "lineno": 21
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 22
+        },
+        {
+          "module": "time",
+          "names": [
+            "sleep"
+          ],
+          "lineno": 23
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Callable",
+            "Optional"
+          ],
+          "lineno": 24
+        },
+        {
+          "module": "",
+          "names": [
+            "numpy"
+          ],
+          "lineno": 26
+        },
+        {
+          "module": "aprs_modem",
+          "names": [
+            "build_aprs_ack_payload",
+            "build_aprs_message_payload",
+            "build_aprs_position_payload",
+            "decode_ax25_from_samples",
+            "parse_aprs_message_info",
+            "parse_aprs_position_info",
+            "parse_group_wire_text",
+            "parse_intro_wire_text",
+            "write_aprs_wav",
+            "write_test_tone_wav"
+          ],
+          "lineno": 28
+        },
+        {
+          "module": "audio_router",
+          "names": [
+            "AudioRouter"
+          ],
+          "lineno": 40
+        },
+        {
+          "module": "models",
+          "names": [
+            "AprsConfig",
+            "AudioConfig",
+            "DecodedPacket",
+            "MSG_ID_COUNTER",
+            "PttConfig",
+            "RadioConfig"
+          ],
+          "lineno": 41
+        },
+        {
+          "module": "radio_ctrl",
+          "names": [
+            "RadioController"
+          ],
+          "lineno": 49
+        },
+        {
+          "module": "sa818_client",
+          "names": [
+            "SA818Error"
+          ],
+          "lineno": 50
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_apply_trim_db",
+          "lineno": 616,
+          "end_lineno": 619,
+          "args": [
+            "mono",
+            "trim_db"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "_TxSnapshot",
+          "lineno": 57,
+          "end_lineno": 92,
+          "bases": [],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 64,
+              "end_lineno": 92,
+              "args": [
+                "self",
+                "source",
+                "destination",
+                "path",
+                "gain",
+                "preamble_flags",
+                "trailing_flags",
+                "repeats",
+                "out_dev",
+                "ptt",
+                "radio",
+                "volume",
+                "reinit",
+                "port"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "AprsEngine",
+          "lineno": 95,
+          "end_lineno": 609,
+          "bases": [],
+          "decorators": [],
+          "doc": "Encapsulates all APRS TX/RX workflow logic.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 101,
+              "end_lineno": 131,
+              "args": [
+                "self",
+                "radio",
+                "audio",
+                "audio_dir"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_log",
+              "lineno": 137,
+              "end_lineno": 138,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_aprs_log",
+              "lineno": 140,
+              "end_lineno": 141,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_error",
+              "lineno": 143,
+              "end_lineno": 144,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_packet",
+              "lineno": 146,
+              "end_lineno": 147,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_ack_tx",
+              "lineno": 149,
+              "end_lineno": 150,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_output_level",
+              "lineno": 152,
+              "end_lineno": 153,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_input_level",
+              "lineno": 155,
+              "end_lineno": 156,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_waterfall",
+              "lineno": 158,
+              "end_lineno": 159,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_rx_clip",
+              "lineno": 161,
+              "end_lineno": 162,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "send_payload",
+              "lineno": 168,
+              "end_lineno": 171,
+              "args": [
+                "self",
+                "payload",
+                "snap"
+              ],
+              "decorators": [],
+              "doc": "Fire-and-forget: launches a worker thread for TX."
+            },
+            {
+              "name": "send_payload_blocking",
+              "lineno": 173,
+              "end_lineno": 175,
+              "args": [
+                "self",
+                "payload",
+                "snap"
+              ],
+              "decorators": [],
+              "doc": "Blocking TX \u2014 call only from a worker thread."
+            },
+            {
+              "name": "_tx_worker",
+              "lineno": 177,
+              "end_lineno": 187,
+              "args": [
+                "self",
+                "payload",
+                "snap"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_do_tx",
+              "lineno": 189,
+              "end_lineno": 255,
+              "args": [
+                "self",
+                "payload",
+                "snap",
+                "attempt"
+              ],
+              "decorators": [],
+              "doc": "Prepare radio, play APRS WAV, restore radio config."
+            },
+            {
+              "name": "send_reliable",
+              "lineno": 261,
+              "end_lineno": 276,
+              "args": [
+                "self",
+                "addressee",
+                "text",
+                "snap",
+                "message_id",
+                "timeout_s",
+                "retries"
+              ],
+              "decorators": [],
+              "doc": "Fire-and-forget reliable TX with ACK wait."
+            },
+            {
+              "name": "_reliable_worker",
+              "lineno": 278,
+              "end_lineno": 299,
+              "args": [
+                "self",
+                "addressee",
+                "text",
+                "snap",
+                "message_id",
+                "timeout_s",
+                "retries"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "note_ack",
+              "lineno": 301,
+              "end_lineno": 307,
+              "args": [
+                "self",
+                "message_id"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_wait_ack",
+              "lineno": 309,
+              "end_lineno": 323,
+              "args": [
+                "self",
+                "message_id",
+                "timeout_s"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "new_message_id",
+              "lineno": 326,
+              "end_lineno": 327,
+              "args": [],
+              "decorators": [
+                "staticmethod"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "play_test_tone",
+              "lineno": 333,
+              "end_lineno": 352,
+              "args": [
+                "self",
+                "freq_hz",
+                "duration_s",
+                "out_dev",
+                "ptt",
+                "ptt_cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "rx_running",
+              "lineno": 359,
+              "end_lineno": 360,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "start_rx_monitor",
+              "lineno": 362,
+              "end_lineno": 387,
+              "args": [
+                "self",
+                "in_dev",
+                "chunk_s",
+                "trim_db",
+                "aprs_radio"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "stop_rx_monitor",
+              "lineno": 389,
+              "end_lineno": 403,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_rx_loop",
+              "lineno": 405,
+              "end_lineno": 474,
+              "args": [
+                "self",
+                "in_dev",
+                "chunk_s",
+                "trim_db"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "one_shot_decode",
+              "lineno": 480,
+              "end_lineno": 514,
+              "args": [
+                "self",
+                "in_dev",
+                "duration_s",
+                "trim_db"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "handle_received_packet",
+              "lineno": 520,
+              "end_lineno": 583,
+              "args": [
+                "self",
+                "pkt",
+                "local_calls",
+                "auto_ack",
+                "snap"
+              ],
+              "decorators": [],
+              "doc": "Process a received packet. Returns a dict of parsed fields for UI, or None. Also triggers auto-ACK if needed."
+            },
+            {
+              "name": "_dispatch_auto_ack",
+              "lineno": 585,
+              "end_lineno": 597,
+              "args": [
+                "self",
+                "addressee",
+                "msg_id",
+                "snap"
+              ],
+              "decorators": [],
+              "doc": "Send ACK in a short-lived thread so it doesn't block RX capture."
+            },
+            {
+              "name": "_log",
+              "lineno": 603,
+              "end_lineno": 605,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_aprs_log",
+              "lineno": 607,
+              "end_lineno": 609,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/aprs_modem.py",
+      "bytes": 27392,
+      "lines": 793,
+      "module_doc": "APRS payload helpers and AX.25/AFSK modem.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "functools"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "math"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "",
+          "names": [
+            "re"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 21
+        },
+        {
+          "module": "dataclasses",
+          "names": [
+            "dataclass"
+          ],
+          "lineno": 22
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 23
+        },
+        {
+          "module": "",
+          "names": [
+            "numpy"
+          ],
+          "lineno": 25
+        },
+        {
+          "module": "models",
+          "names": [
+            "DecodedPacket"
+          ],
+          "lineno": 27
+        }
+      ],
+      "constants": [
+        "APRS_MESSAGE_BODY_MAX",
+        "APRS_MESSAGE_TEXT_MAX",
+        "APRS_POSITION_COMMENT_MAX",
+        "FLAG_BITS",
+        "GROUP_WIRE_RE",
+        "INTRO_WIRE_RE",
+        "_CRC16_TABLE",
+        "_FLAG_ARR",
+        "_LSB_WEIGHTS"
+      ],
+      "functions": [
+        {
+          "name": "build_ax25_ui_frame",
+          "lineno": 65,
+          "end_lineno": 79,
+          "args": [
+            "source",
+            "destination",
+            "path_via",
+            "info"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "frame_to_bitstream",
+          "lineno": 86,
+          "end_lineno": 103,
+          "args": [
+            "frame",
+            "preamble_flags",
+            "trailing_flags"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "nrzi_encode",
+          "lineno": 106,
+          "end_lineno": 113,
+          "args": [
+            "bits"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "afsk_from_nrzi",
+          "lineno": 116,
+          "end_lineno": 168,
+          "args": [
+            "nrzi",
+            "sample_rate",
+            "tx_gain"
+          ],
+          "decorators": [],
+          "doc": "Fully vectorized AFSK encoder (single np.sin call). Returns 16-bit PCM mono bytes."
+        },
+        {
+          "name": "write_aprs_wav",
+          "lineno": 171,
+          "end_lineno": 188,
+          "args": [
+            "path",
+            "source",
+            "destination",
+            "message",
+            "path_via",
+            "sample_rate",
+            "tx_gain",
+            "preamble_flags",
+            "trailing_flags"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "write_test_tone_wav",
+          "lineno": 191,
+          "end_lineno": 198,
+          "args": [
+            "path",
+            "frequency_hz",
+            "seconds",
+            "sample_rate"
+          ],
+          "decorators": [],
+          "doc": "Vectorized test tone generator."
+        },
+        {
+          "name": "build_aprs_message_payload",
+          "lineno": 205,
+          "end_lineno": 210,
+          "args": [
+            "addressee",
+            "text",
+            "message_id"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_aprs_ack_payload",
+          "lineno": 213,
+          "end_lineno": 218,
+          "args": [
+            "addressee",
+            "message_id"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_aprs_position_payload",
+          "lineno": 221,
+          "end_lineno": 235,
+          "args": [
+            "lat_deg",
+            "lon_deg",
+            "comment",
+            "symbol_table",
+            "symbol"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_group_wire_text",
+          "lineno": 238,
+          "end_lineno": 253,
+          "args": [
+            "group",
+            "body",
+            "part",
+            "total"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_intro_wire_text",
+          "lineno": 256,
+          "end_lineno": 264,
+          "args": [
+            "callsign",
+            "lat",
+            "lon",
+            "note"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "split_text_for_group",
+          "lineno": 271,
+          "end_lineno": 277,
+          "args": [
+            "text",
+            "group"
+          ],
+          "decorators": [],
+          "doc": "Split text into chunks that fit inside group wire payloads."
+        },
+        {
+          "name": "split_aprs_text_chunks",
+          "lineno": 280,
+          "end_lineno": 282,
+          "args": [
+            "text",
+            "max_len"
+          ],
+          "decorators": [],
+          "doc": "Split plain text into chunks for direct messaging."
+        },
+        {
+          "name": "_split_chunks",
+          "lineno": 285,
+          "end_lineno": 302,
+          "args": [
+            "body",
+            "limit"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_aprs_message_info",
+          "lineno": 309,
+          "end_lineno": 326,
+          "args": [
+            "info"
+          ],
+          "decorators": [],
+          "doc": "Return (addressee, text, msg_id_or_None) or None."
+        },
+        {
+          "name": "parse_aprs_position_info",
+          "lineno": 329,
+          "end_lineno": 357,
+          "args": [
+            "info",
+            "destination"
+          ],
+          "decorators": [],
+          "doc": "Return (lat, lon, comment) for uncompressed, compressed, and Mic-E APRS positions."
+        },
+        {
+          "name": "_parse_compressed_position",
+          "lineno": 360,
+          "end_lineno": 379,
+          "args": [
+            "payload"
+          ],
+          "decorators": [],
+          "doc": "Parse base-91 compressed APRS position from the payload (after DTI/timestamp)."
+        },
+        {
+          "name": "_mic_e_digit_flag",
+          "lineno": 382,
+          "end_lineno": 388,
+          "args": [
+            "c"
+          ],
+          "decorators": [],
+          "doc": "Return (digit, flag) for a Mic-E destination character."
+        },
+        {
+          "name": "_parse_mice_position",
+          "lineno": 391,
+          "end_lineno": 428,
+          "args": [
+            "dest",
+            "info"
+          ],
+          "decorators": [],
+          "doc": "Decode Mic-E position from destination address + info field."
+        },
+        {
+          "name": "parse_group_wire_text",
+          "lineno": 431,
+          "end_lineno": 439,
+          "args": [
+            "text"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_intro_wire_text",
+          "lineno": 442,
+          "end_lineno": 452,
+          "args": [
+            "text"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "decode_ax25_from_wav",
+          "lineno": 459,
+          "end_lineno": 461,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "decode_ax25_from_samples",
+          "lineno": 464,
+          "end_lineno": 497,
+          "args": [
+            "rate",
+            "mono"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_build_crc16_table",
+          "lineno": 504,
+          "end_lineno": 514,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "crc16_x25",
+          "lineno": 520,
+          "end_lineno": 524,
+          "args": [
+            "data"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_write_pcm16_mono",
+          "lineno": 531,
+          "end_lineno": 539,
+          "args": [
+            "path",
+            "sample_rate",
+            "data"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_read_wav_mono",
+          "lineno": 542,
+          "end_lineno": 553,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_byte_lsb",
+          "lineno": 556,
+          "end_lineno": 557,
+          "args": [
+            "value"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_encode_ax25_addr",
+          "lineno": 560,
+          "end_lineno": 573,
+          "args": [
+            "value",
+            "is_last"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_decode_addr",
+          "lineno": 576,
+          "end_lineno": 579,
+          "args": [
+            "adr"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_format_lat",
+          "lineno": 582,
+          "end_lineno": 587,
+          "args": [
+            "lat"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_format_lon",
+          "lineno": 590,
+          "end_lineno": 595,
+          "args": [
+            "lon"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_parse_aprs_lat",
+          "lineno": 598,
+          "end_lineno": 610,
+          "args": [
+            "token"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_parse_aprs_lon",
+          "lineno": 613,
+          "end_lineno": 625,
+          "args": [
+            "token"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_lowpass_kernel",
+          "lineno": 631,
+          "end_lineno": 641,
+          "args": [
+            "rate",
+            "cutoff_hz",
+            "taps"
+          ],
+          "decorators": [
+            "functools.lru_cache(maxsize=16)"
+          ],
+          "doc": ""
+        },
+        {
+          "name": "_preprocess_samples",
+          "lineno": 644,
+          "end_lineno": 658,
+          "args": [
+            "samples",
+            "rate"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_afsk_discriminator",
+          "lineno": 661,
+          "end_lineno": 678,
+          "args": [
+            "samples",
+            "rate",
+            "mark_hz",
+            "space_hz"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_extract_nrzi_levels",
+          "lineno": 681,
+          "end_lineno": 690,
+          "args": [
+            "demod",
+            "spb",
+            "offset",
+            "invert_tones"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_nrzi_to_bits",
+          "lineno": 693,
+          "end_lineno": 700,
+          "args": [
+            "levels"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_extract_hdlc_frames",
+          "lineno": 706,
+          "end_lineno": 727,
+          "args": [
+            "bits"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_remove_bit_stuffing",
+          "lineno": 730,
+          "end_lineno": 749,
+          "args": [
+            "bits"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_bits_to_bytes_lsb",
+          "lineno": 755,
+          "end_lineno": 760,
+          "args": [
+            "bits"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_decode_ax25_frame",
+          "lineno": 763,
+          "end_lineno": 792,
+          "args": [
+            "frame"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "app/engine/audio_router.py",
+      "bytes": 10522,
+      "lines": 279,
+      "module_doc": "AudioRouter: device selection, PTT integration, and playback management.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "subprocess"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "time",
+          "names": [
+            "sleep"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Callable",
+            "Optional"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "",
+          "names": [
+            "numpy"
+          ],
+          "lineno": 22
+        },
+        {
+          "module": "audio_tools",
+          "names": [
+            "capture_samples",
+            "estimate_wav_level",
+            "list_input_devices",
+            "list_output_devices",
+            "play_wav_blocking_compatible",
+            "record_wav",
+            "stop_playback",
+            "wav_duration_seconds"
+          ],
+          "lineno": 24
+        },
+        {
+          "module": "models",
+          "names": [
+            "AudioConfig",
+            "PttConfig"
+          ],
+          "lineno": 34
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_play_wav_subprocess",
+          "lineno": 248,
+          "end_lineno": 259,
+          "args": [
+            "wav_path",
+            "device_index",
+            "app_dir"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_capture_wav_subprocess",
+          "lineno": 262,
+          "end_lineno": 278,
+          "args": [
+            "wav_path",
+            "seconds",
+            "device_index",
+            "app_dir"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "AudioRouter",
+          "lineno": 37,
+          "end_lineno": 241,
+          "bases": [],
+          "decorators": [],
+          "doc": "Manages output/input device selection, PTT keying, and audio playback.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 40,
+              "end_lineno": 46,
+              "args": [
+                "self",
+                "app_dir"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_log_cb",
+              "lineno": 48,
+              "end_lineno": 49,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_log",
+              "lineno": 51,
+              "end_lineno": 53,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "refresh_output_devices",
+              "lineno": 59,
+              "end_lineno": 60,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "refresh_input_devices",
+              "lineno": 62,
+              "end_lineno": 63,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "auto_select_usb_pair",
+              "lineno": 69,
+              "end_lineno": 132,
+              "args": [
+                "self",
+                "out_hint",
+                "in_hint"
+              ],
+              "decorators": [],
+              "doc": "Try to find matching USB audio device pair."
+            },
+            {
+              "name": "worker_busy",
+              "lineno": 139,
+              "end_lineno": 140,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "stop_audio",
+              "lineno": 142,
+              "end_lineno": 144,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "play_with_ptt_blocking",
+              "lineno": 150,
+              "end_lineno": 183,
+              "args": [
+                "self",
+                "wav_path",
+                "out_dev",
+                "ptt",
+                "ptt_cb"
+              ],
+              "decorators": [],
+              "doc": "Play WAV with PTT keying. Blocks until done. Must run in worker thread."
+            },
+            {
+              "name": "capture_compatible",
+              "lineno": 189,
+              "end_lineno": 219,
+              "args": [
+                "self",
+                "seconds",
+                "device_index",
+                "wav_out_path"
+              ],
+              "decorators": [],
+              "doc": "Capture audio. On Windows from a non-main thread uses a subprocess."
+            },
+            {
+              "name": "record_compatible",
+              "lineno": 221,
+              "end_lineno": 229,
+              "args": [
+                "self",
+                "wav_path",
+                "seconds",
+                "device_index"
+              ],
+              "decorators": [],
+              "doc": "Record WAV. On Windows from a non-main thread uses a subprocess."
+            },
+            {
+              "name": "tx_active",
+              "lineno": 236,
+              "end_lineno": 237,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "tx_level_hold",
+              "lineno": 240,
+              "end_lineno": 241,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/audio_tools.py",
+      "bytes": 9533,
+      "lines": 260,
+      "module_doc": "Audio I/O helpers for playback, recording, and device enumeration.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 16
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_list_devices",
+          "lineno": 35,
+          "end_lineno": 83,
+          "args": [
+            "direction"
+          ],
+          "decorators": [],
+          "doc": "Enumerate audio devices filtered by direction ('input' or 'output')."
+        },
+        {
+          "name": "list_output_devices",
+          "lineno": 86,
+          "end_lineno": 87,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "list_input_devices",
+          "lineno": 90,
+          "end_lineno": 91,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "play_wav",
+          "lineno": 98,
+          "end_lineno": 107,
+          "args": [
+            "path",
+            "device_index"
+          ],
+          "decorators": [],
+          "doc": "Non-blocking WAV playback. Stops any current playback first."
+        },
+        {
+          "name": "play_wav_blocking",
+          "lineno": 110,
+          "end_lineno": 119,
+          "args": [
+            "path",
+            "device_index"
+          ],
+          "decorators": [],
+          "doc": "Blocking WAV playback."
+        },
+        {
+          "name": "play_wav_blocking_compatible",
+          "lineno": 122,
+          "end_lineno": 166,
+          "args": [
+            "path",
+            "device_index"
+          ],
+          "decorators": [],
+          "doc": "Blocking playback with device-compatible resampling (mono, device sample rate)."
+        },
+        {
+          "name": "stop_playback",
+          "lineno": 169,
+          "end_lineno": 176,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "record_wav",
+          "lineno": 183,
+          "end_lineno": 193,
+          "args": [
+            "path",
+            "seconds",
+            "device_index",
+            "sample_rate"
+          ],
+          "decorators": [],
+          "doc": "Record mono 16-bit WAV from selected input device (blocking)."
+        },
+        {
+          "name": "capture_samples",
+          "lineno": 196,
+          "end_lineno": 207,
+          "args": [
+            "seconds",
+            "device_index",
+            "sample_rate"
+          ],
+          "decorators": [],
+          "doc": "Capture mono float32 samples. Returns (sample_rate, float32_array)."
+        },
+        {
+          "name": "wav_duration_seconds",
+          "lineno": 214,
+          "end_lineno": 218,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "estimate_wav_level",
+          "lineno": 221,
+          "end_lineno": 232,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": "Return a normalised RMS level 0..1 for visualiser gain estimation."
+        },
+        {
+          "name": "_load_wav_as_int16",
+          "lineno": 239,
+          "end_lineno": 250,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_write_pcm16_mono",
+          "lineno": 253,
+          "end_lineno": 259,
+          "args": [
+            "path",
+            "sample_rate",
+            "data"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "app/engine/comms_mgr.py",
+      "bytes": 9120,
+      "lines": 255,
+      "module_doc": "CommsManager: contacts, groups, and chat thread logic.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "",
+          "names": [
+            "re"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "datetime",
+          "names": [
+            "datetime"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Callable",
+            "Optional"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "aprs_modem",
+          "names": [
+            "build_group_wire_text",
+            "build_intro_wire_text",
+            "split_aprs_text_chunks",
+            "split_text_for_group"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "models",
+          "names": [
+            "ChatMessage"
+          ],
+          "lineno": 20
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_norm_call",
+          "lineno": 252,
+          "end_lineno": 254,
+          "args": [
+            "token"
+          ],
+          "decorators": [],
+          "doc": "Normalise a callsign to uppercase stripped form."
+        }
+      ],
+      "classes": [
+        {
+          "name": "CommsManager",
+          "lineno": 23,
+          "end_lineno": 245,
+          "bases": [],
+          "decorators": [],
+          "doc": "Manages contacts, groups, chat history, and heard stations.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 26,
+              "end_lineno": 39,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_contacts_changed",
+              "lineno": 45,
+              "end_lineno": 46,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_message_added",
+              "lineno": 48,
+              "end_lineno": 49,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_heard_changed",
+              "lineno": 51,
+              "end_lineno": 52,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "contacts",
+              "lineno": 59,
+              "end_lineno": 60,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "add_contact",
+              "lineno": 62,
+              "end_lineno": 69,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "remove_contact",
+              "lineno": 71,
+              "end_lineno": 78,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "ensure_contact",
+              "lineno": 80,
+              "end_lineno": 81,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "add_heard_to_contacts",
+              "lineno": 83,
+              "end_lineno": 90,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "groups",
+              "lineno": 97,
+              "end_lineno": 98,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "set_group",
+              "lineno": 100,
+              "end_lineno": 105,
+              "args": [
+                "self",
+                "name",
+                "members"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "delete_group",
+              "lineno": 107,
+              "end_lineno": 112,
+              "args": [
+                "self",
+                "name"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "heard",
+              "lineno": 119,
+              "end_lineno": 120,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "note_heard",
+              "lineno": 122,
+              "end_lineno": 127,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "clear_heard",
+              "lineno": 129,
+              "end_lineno": 132,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "messages",
+              "lineno": 139,
+              "end_lineno": 140,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "add_message",
+              "lineno": 142,
+              "end_lineno": 147,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "messages_for_thread",
+              "lineno": 149,
+              "end_lineno": 150,
+              "args": [
+                "self",
+                "thread_key"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "all_thread_keys",
+              "lineno": 152,
+              "end_lineno": 157,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "unread_for_thread",
+              "lineno": 159,
+              "end_lineno": 160,
+              "args": [
+                "self",
+                "thread_key"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_active_thread",
+              "lineno": 162,
+              "end_lineno": 164,
+              "args": [
+                "self",
+                "thread_key"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "active_thread",
+              "lineno": 167,
+              "end_lineno": 168,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "last_direct_sender",
+              "lineno": 171,
+              "end_lineno": 172,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "set_last_direct_sender",
+              "lineno": 174,
+              "end_lineno": 175,
+              "args": [
+                "self",
+                "call"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "build_direct_chunks",
+              "lineno": 181,
+              "end_lineno": 183,
+              "args": [
+                "self",
+                "text"
+              ],
+              "decorators": [],
+              "doc": "Split text for direct APRS messaging."
+            },
+            {
+              "name": "build_group_chunks",
+              "lineno": 185,
+              "end_lineno": 191,
+              "args": [
+                "self",
+                "group",
+                "text"
+              ],
+              "decorators": [],
+              "doc": "Split text into group wire-format chunks (prefix overhead accounted)."
+            },
+            {
+              "name": "build_intro_payload",
+              "lineno": 193,
+              "end_lineno": 194,
+              "args": [
+                "self",
+                "callsign",
+                "lat",
+                "lon",
+                "note"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "should_process_intro",
+              "lineno": 200,
+              "end_lineno": 205,
+              "args": [
+                "self",
+                "src_call",
+                "lat",
+                "lon",
+                "note"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "infer_thread_key",
+              "lineno": 211,
+              "end_lineno": 223,
+              "args": [
+                "self",
+                "src",
+                "dst",
+                "text",
+                "local_calls"
+              ],
+              "decorators": [],
+              "doc": "Return the thread key for a given packet, matching v1 logic."
+            },
+            {
+              "name": "to_dict",
+              "lineno": 229,
+              "end_lineno": 233,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "from_dict",
+              "lineno": 235,
+              "end_lineno": 245,
+              "args": [
+                "self",
+                "data"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/models.py",
+      "bytes": 5287,
+      "lines": 199,
+      "module_doc": "Shared dataclasses, enums, and type aliases used across the engine layer.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "dataclasses",
+          "names": [
+            "dataclass",
+            "field"
+          ],
+          "lineno": 7
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 8
+        }
+      ],
+      "constants": [
+        "MSG_ID_COUNTER"
+      ],
+      "functions": [],
+      "classes": [
+        {
+          "name": "RadioConfig",
+          "lineno": 16,
+          "end_lineno": 36,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": [
+            {
+              "name": "clone",
+              "lineno": 26,
+              "end_lineno": 36,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "DecodedPacket",
+          "lineno": 44,
+          "end_lineno": 49,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "AprsConfig",
+          "lineno": 53,
+          "end_lineno": 62,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ReliableConfig",
+          "lineno": 66,
+          "end_lineno": 70,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "PttConfig",
+          "lineno": 78,
+          "end_lineno": 83,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "AudioConfig",
+          "lineno": 87,
+          "end_lineno": 91,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ChatMessage",
+          "lineno": 99,
+          "end_lineno": 106,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "_MsgIdCounter",
+          "lineno": 113,
+          "end_lineno": 121,
+          "bases": [],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 114,
+              "end_lineno": 116,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "next",
+              "lineno": 118,
+              "end_lineno": 121,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "AppProfile",
+          "lineno": 132,
+          "end_lineno": 198,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        }
+      ]
+    },
+    {
+      "path": "app/engine/profile.py",
+      "bytes": 8492,
+      "lines": 193,
+      "module_doc": "ProfileManager: validated load/save of AppProfile to JSON.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "json"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "",
+          "names": [
+            "logging"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "models",
+          "names": [
+            "AppProfile"
+          ],
+          "lineno": 19
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_profile_to_dict",
+          "lineno": 52,
+          "end_lineno": 103,
+          "args": [
+            "p"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_dict_to_profile",
+          "lineno": 106,
+          "end_lineno": 192,
+          "args": [
+            "d"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "ProfileManager",
+          "lineno": 24,
+          "end_lineno": 45,
+          "bases": [],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 25,
+              "end_lineno": 26,
+              "args": [
+                "self",
+                "profile_path"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "path",
+              "lineno": 29,
+              "end_lineno": 30,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "save",
+              "lineno": 32,
+              "end_lineno": 35,
+              "args": [
+                "self",
+                "profile"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "load",
+              "lineno": 37,
+              "end_lineno": 45,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/radio_ctrl.py",
+      "bytes": 5732,
+      "lines": 156,
+      "module_doc": "RadioController: thread-safe radio state manager with save/restore.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Callable",
+            "Optional"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "models",
+          "names": [
+            "RadioConfig"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "sa818_client",
+          "names": [
+            "SA818Client",
+            "SA818Error"
+          ],
+          "lineno": 18
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "RadioController",
+          "lineno": 21,
+          "end_lineno": 155,
+          "bases": [],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 22,
+              "end_lineno": 28,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_on_connect",
+              "lineno": 34,
+              "end_lineno": 35,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_on_disconnect",
+              "lineno": 37,
+              "end_lineno": 38,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "connected",
+              "lineno": 45,
+              "end_lineno": 46,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "client",
+              "lineno": 49,
+              "end_lineno": 50,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "connect",
+              "lineno": 56,
+              "end_lineno": 62,
+              "args": [
+                "self",
+                "port",
+                "baud",
+                "timeout"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "disconnect",
+              "lineno": 64,
+              "end_lineno": 70,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "probe_and_connect",
+              "lineno": 72,
+              "end_lineno": 81,
+              "args": [
+                "self",
+                "port",
+                "baud",
+                "timeout"
+              ],
+              "decorators": [],
+              "doc": "Probe port; if SA818 found, connect and return (True, version)."
+            },
+            {
+              "name": "apply_config",
+              "lineno": 87,
+              "end_lineno": 92,
+              "args": [
+                "self",
+                "cfg"
+              ],
+              "decorators": [],
+              "doc": "Apply radio config and remember it as current."
+            },
+            {
+              "name": "push_config",
+              "lineno": 94,
+              "end_lineno": 104,
+              "args": [
+                "self",
+                "cfg"
+              ],
+              "decorators": [],
+              "doc": "Save current config (if any) then apply new one."
+            },
+            {
+              "name": "pop_config",
+              "lineno": 106,
+              "end_lineno": 118,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Restore previously saved config. Returns reply or None if no saved config."
+            },
+            {
+              "name": "has_saved_config",
+              "lineno": 120,
+              "end_lineno": 122,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_volume",
+              "lineno": 128,
+              "end_lineno": 130,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_filters",
+              "lineno": 132,
+              "end_lineno": 134,
+              "args": [
+                "self",
+                "disable_emphasis",
+                "disable_highpass",
+                "disable_lowpass"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_tail",
+              "lineno": 136,
+              "end_lineno": 138,
+              "args": [
+                "self",
+                "open_tail"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "version",
+              "lineno": 140,
+              "end_lineno": 142,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_ptt",
+              "lineno": 144,
+              "end_lineno": 146,
+              "args": [
+                "self",
+                "enabled",
+                "line",
+                "active_high"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "release_ptt",
+              "lineno": 148,
+              "end_lineno": 155,
+              "args": [
+                "self",
+                "line",
+                "active_high"
+              ],
+              "decorators": [],
+              "doc": "Release PTT without raising."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/engine/sa818_client.py",
+      "bytes": 10228,
+      "lines": 290,
+      "module_doc": "SA818 serial control backend.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "",
+          "names": [
+            "re"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "",
+          "names": [
+            "time"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "serial"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "models",
+          "names": [
+            "RadioConfig"
+          ],
+          "lineno": 20
+        }
+      ],
+      "constants": [
+        "CTCSS",
+        "DCS_CODES"
+      ],
+      "functions": [
+        {
+          "name": "_validate_frequency",
+          "lineno": 248,
+          "end_lineno": 252,
+          "args": [
+            "freq"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_encode_tones",
+          "lineno": 255,
+          "end_lineno": 264,
+          "args": [
+            "cfg"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_encode_ctcss",
+          "lineno": 267,
+          "end_lineno": 277,
+          "args": [
+            "value"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_encode_dcs",
+          "lineno": 280,
+          "end_lineno": 289,
+          "args": [
+            "value"
+          ],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "SA818Error",
+          "lineno": 46,
+          "end_lineno": 47,
+          "bases": [
+            "Exception"
+          ],
+          "decorators": [],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "SA818Client",
+          "lineno": 50,
+          "end_lineno": 241,
+          "bases": [],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 55,
+              "end_lineno": 57,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "connected",
+              "lineno": 64,
+              "end_lineno": 65,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "connect",
+              "lineno": 67,
+              "end_lineno": 86,
+              "args": [
+                "self",
+                "port",
+                "baud",
+                "timeout"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "probe",
+              "lineno": 89,
+              "end_lineno": 102,
+              "args": [
+                "cls",
+                "port",
+                "baud",
+                "timeout"
+              ],
+              "decorators": [
+                "classmethod"
+              ],
+              "doc": "Try to connect to port; return (success, version_or_error)."
+            },
+            {
+              "name": "disconnect",
+              "lineno": 104,
+              "end_lineno": 111,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_command",
+              "lineno": 117,
+              "end_lineno": 138,
+              "args": [
+                "self",
+                "cmd",
+                "pause"
+              ],
+              "decorators": [],
+              "doc": "Send AT command and return stripped reply. Must hold _io_lock."
+            },
+            {
+              "name": "command",
+              "lineno": 140,
+              "end_lineno": 143,
+              "args": [
+                "self",
+                "cmd",
+                "pause"
+              ],
+              "decorators": [],
+              "doc": "Public command interface (thread-safe)."
+            },
+            {
+              "name": "version",
+              "lineno": 149,
+              "end_lineno": 150,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_volume",
+              "lineno": 152,
+              "end_lineno": 158,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_filters",
+              "lineno": 160,
+              "end_lineno": 165,
+              "args": [
+                "self",
+                "disable_emphasis",
+                "disable_highpass",
+                "disable_lowpass"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_tail",
+              "lineno": 167,
+              "end_lineno": 171,
+              "args": [
+                "self",
+                "open_tail"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_radio",
+              "lineno": 173,
+              "end_lineno": 191,
+              "args": [
+                "self",
+                "cfg"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_ptt",
+              "lineno": 197,
+              "end_lineno": 213,
+              "args": [
+                "self",
+                "enabled",
+                "line",
+                "active_high"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_release_ptt_safe",
+              "lineno": 215,
+              "end_lineno": 223,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Release PTT without raising. Call before closing port."
+            },
+            {
+              "name": "_safe_modem_lines",
+              "lineno": 225,
+              "end_lineno": 233,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Force DTR/RTS low so control lines cannot accidentally key PTT."
+            },
+            {
+              "name": "_flush_rx",
+              "lineno": 235,
+              "end_lineno": 241,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/ui/__init__.py",
+      "bytes": 0,
+      "lines": 1,
+      "module_doc": "",
+      "imports": [],
+      "constants": [],
+      "functions": [],
+      "classes": []
+    },
+    {
+      "path": "app/ui/aprs_tab.py",
+      "bytes": 15147,
+      "lines": 301,
+      "module_doc": "APRS Tab \u2014 TX, RX monitor, position, and map.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "typing",
+          "names": [
+            "TYPE_CHECKING"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "messagebox",
+            "ttk"
+          ],
+          "lineno": 9
+        },
+        {
+          "module": "tkinter.scrolledtext",
+          "names": [
+            "ScrolledText"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "engine.models",
+          "names": [
+            "AppProfile"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "widgets",
+          "names": [
+            "add_row",
+            "scrollable_frame",
+            "AprsMapCanvas",
+            "BoundedLog"
+          ],
+          "lineno": 13
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "AprsTab",
+          "lineno": 19,
+          "end_lineno": 300,
+          "bases": [
+            "ttk.Frame"
+          ],
+          "decorators": [],
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 20,
+              "end_lineno": 23,
+              "args": [
+                "self",
+                "parent",
+                "app"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build",
+              "lineno": 25,
+              "end_lineno": 45,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_identity",
+              "lineno": 51,
+              "end_lineno": 69,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_message",
+              "lineno": 71,
+              "end_lineno": 83,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_position",
+              "lineno": 85,
+              "end_lineno": 95,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_rx",
+              "lineno": 97,
+              "end_lineno": 141,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_map",
+              "lineno": 147,
+              "end_lineno": 158,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_monitor",
+              "lineno": 160,
+              "end_lineno": 166,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "aprs_log",
+              "lineno": 168,
+              "end_lineno": 169,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "add_map_point",
+              "lineno": 171,
+              "end_lineno": 172,
+              "args": [
+                "self",
+                "lat",
+                "lon",
+                "label"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_clear_map",
+              "lineno": 174,
+              "end_lineno": 176,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_open_in_browser",
+              "lineno": 178,
+              "end_lineno": 186,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_profile",
+              "lineno": 192,
+              "end_lineno": 215,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "collect_profile",
+              "lineno": 217,
+              "end_lineno": 267,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "append_log",
+              "lineno": 273,
+              "end_lineno": 275,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": "Append a line to the APRS monitor log (alias for aprs_log)."
+            },
+            {
+              "name": "set_monitor_active",
+              "lineno": 277,
+              "end_lineno": 279,
+              "args": [
+                "self",
+                "active"
+              ],
+              "decorators": [],
+              "doc": "Update the RX monitor status indicator label."
+            },
+            {
+              "name": "set_input_level",
+              "lineno": 281,
+              "end_lineno": 284,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": "Update input level indicator (separate from clip)."
+            },
+            {
+              "name": "set_output_level",
+              "lineno": 286,
+              "end_lineno": 288,
+              "args": [
+                "self",
+                "level"
+              ],
+              "decorators": [],
+              "doc": "Update TX level (currently just logged, could drive a meter)."
+            },
+            {
+              "name": "push_waterfall",
+              "lineno": 290,
+              "end_lineno": 293,
+              "args": [
+                "self",
+                "mono",
+                "rate"
+              ],
+              "decorators": [],
+              "doc": "Feed audio samples to the waterfall widget if present."
+            },
+            {
+              "name": "set_rx_clip",
+              "lineno": 295,
+              "end_lineno": 300,
+              "args": [
+                "self",
+                "pct"
+              ],
+              "decorators": [],
+              "doc": "Show RX clip percentage in the clip label."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/ui/comms_tab.py",
+      "bytes": 16033,
+      "lines": 393,
+      "module_doc": "CommsTab \u2014 Contacts, Groups, Chat Threads, Intro Discovery.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 9
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "messagebox",
+            "simpledialog",
+            "ttk"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "typing",
+          "names": [
+            "TYPE_CHECKING",
+            "Optional"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "engine.models",
+          "names": [
+            "ChatMessage"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "widgets",
+          "names": [
+            "BoundedLog",
+            "add_row",
+            "scrollable_frame"
+          ],
+          "lineno": 16
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "CommsTab",
+          "lineno": 22,
+          "end_lineno": 391,
+          "bases": [
+            "ttk.Frame"
+          ],
+          "decorators": [],
+          "doc": "Chat & comms management tab.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 25,
+              "end_lineno": 28,
+              "args": [
+                "self",
+                "parent",
+                "app"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build",
+              "lineno": 34,
+              "end_lineno": 45,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_left",
+              "lineno": 51,
+              "end_lineno": 110,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_right",
+              "lineno": 116,
+              "end_lineno": 167,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_add_contact",
+              "lineno": 173,
+              "end_lineno": 176,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_remove_contact",
+              "lineno": 178,
+              "end_lineno": 184,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_import_heard_to_contacts",
+              "lineno": 186,
+              "end_lineno": 187,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_clear_heard",
+              "lineno": 189,
+              "end_lineno": 190,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_new_group",
+              "lineno": 196,
+              "end_lineno": 208,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_edit_group",
+              "lineno": 210,
+              "end_lineno": 227,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_delete_group",
+              "lineno": 229,
+              "end_lineno": 236,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_group_select",
+              "lineno": 238,
+              "end_lineno": 247,
+              "args": [
+                "self",
+                "_e"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_send_intro",
+              "lineno": 253,
+              "end_lineno": 254,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_thread_select",
+              "lineno": 260,
+              "end_lineno": 273,
+              "args": [
+                "self",
+                "_e"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_load_thread",
+              "lineno": 275,
+              "end_lineno": 282,
+              "args": [
+                "self",
+                "thread_key"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_render_message",
+              "lineno": 284,
+              "end_lineno": 300,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": "Append a single message to the log with colour tagging."
+            },
+            {
+              "name": "_on_compose_enter",
+              "lineno": 302,
+              "end_lineno": 307,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": "Send on Enter (not Shift+Enter)."
+            },
+            {
+              "name": "_send_message",
+              "lineno": 309,
+              "end_lineno": 320,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_message",
+              "lineno": 326,
+              "end_lineno": 332,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": "Called when a new message arrives (on main thread via after())."
+            },
+            {
+              "name": "refresh_contacts",
+              "lineno": 334,
+              "end_lineno": 352,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Rebuild contacts and group listboxes from CommsManager state."
+            },
+            {
+              "name": "refresh_heard",
+              "lineno": 354,
+              "end_lineno": 358,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Rebuild heard-stations list."
+            },
+            {
+              "name": "_refresh_thread_list",
+              "lineno": 364,
+              "end_lineno": 379,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Rebuild thread listbox, marking unread counts."
+            },
+            {
+              "name": "apply_profile",
+              "lineno": 385,
+              "end_lineno": 387,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": "Load profile values into comms tab widgets."
+            },
+            {
+              "name": "collect_profile",
+              "lineno": 389,
+              "end_lineno": 391,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": "Write comms tab widget values back into profile object."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/ui/events.py",
+      "bytes": 1921,
+      "lines": 124,
+      "module_doc": "Typed event dataclasses for the engine\u2192UI queue.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 9
+        },
+        {
+          "module": "dataclasses",
+          "names": [
+            "dataclass",
+            "field"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional",
+            "Union"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "numpy"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "engine.models",
+          "names": [
+            "ChatMessage",
+            "DecodedPacket"
+          ],
+          "lineno": 16
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "LogEvent",
+          "lineno": 20,
+          "end_lineno": 21,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "AprsLogEvent",
+          "lineno": 25,
+          "end_lineno": 26,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ErrorEvent",
+          "lineno": 30,
+          "end_lineno": 32,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ConnectionEvent",
+          "lineno": 36,
+          "end_lineno": 38,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "PacketEvent",
+          "lineno": 42,
+          "end_lineno": 49,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "MapPointEvent",
+          "lineno": 53,
+          "end_lineno": 56,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "AudioPairEvent",
+          "lineno": 60,
+          "end_lineno": 62,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "InputDeviceEvent",
+          "lineno": 66,
+          "end_lineno": 67,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "InputLevelEvent",
+          "lineno": 71,
+          "end_lineno": 72,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "OutputLevelEvent",
+          "lineno": 76,
+          "end_lineno": 77,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "WaterfallEvent",
+          "lineno": 81,
+          "end_lineno": 83,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "RxClipEvent",
+          "lineno": 87,
+          "end_lineno": 88,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "HeardStationEvent",
+          "lineno": 92,
+          "end_lineno": 93,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ChatMessageEvent",
+          "lineno": 97,
+          "end_lineno": 98,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ContactsChangedEvent",
+          "lineno": 102,
+          "end_lineno": 103,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        }
+      ]
+    },
+    {
+      "path": "app/ui/main_tab.py",
+      "bytes": 11705,
+      "lines": 236,
+      "module_doc": "Main Tab \u2014 Radio control, connection, and audio routing.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "typing",
+          "names": [
+            "TYPE_CHECKING",
+            "Optional"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "messagebox",
+            "ttk"
+          ],
+          "lineno": 9
+        },
+        {
+          "module": "engine.models",
+          "names": [
+            "AppProfile"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "engine.sa818_client",
+          "names": [
+            "CTCSS"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "widgets",
+          "names": [
+            "BoundedLog",
+            "add_row",
+            "scrollable_frame"
+          ],
+          "lineno": 13
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "MainTab",
+          "lineno": 19,
+          "end_lineno": 235,
+          "bases": [
+            "ttk.Frame"
+          ],
+          "decorators": [],
+          "doc": "Control tab: connection, radio params, audio routing, log.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 22,
+              "end_lineno": 27,
+              "args": [
+                "self",
+                "parent",
+                "state"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build",
+              "lineno": 29,
+              "end_lineno": 49,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_params",
+              "lineno": 51,
+              "end_lineno": 128,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_profile",
+              "lineno": 134,
+              "end_lineno": 144,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "collect_profile",
+              "lineno": 146,
+              "end_lineno": 174,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_out_selected",
+              "lineno": 180,
+              "end_lineno": 183,
+              "args": [
+                "self",
+                "_e"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_in_selected",
+              "lineno": 185,
+              "end_lineno": 188,
+              "args": [
+                "self",
+                "_e"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "refresh_audio_devices",
+              "lineno": 194,
+              "end_lineno": 199,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": "Ask app for updated device lists and repopulate comboboxes."
+            },
+            {
+              "name": "populate_audio_devices",
+              "lineno": 201,
+              "end_lineno": 218,
+              "args": [
+                "self",
+                "outs",
+                "ins"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_audio_pair",
+              "lineno": 220,
+              "end_lineno": 225,
+              "args": [
+                "self",
+                "out_idx",
+                "out_name",
+                "in_idx",
+                "in_name"
+              ],
+              "decorators": [],
+              "doc": "Called by app dispatcher when auto-pair succeeds."
+            },
+            {
+              "name": "on_connect",
+              "lineno": 227,
+              "end_lineno": 228,
+              "args": [
+                "self",
+                "port"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "on_disconnect",
+              "lineno": 230,
+              "end_lineno": 231,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "append_log",
+              "lineno": 233,
+              "end_lineno": 235,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": "Append a line to the radio log panel."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/ui/setup_tab.py",
+      "bytes": 18698,
+      "lines": 412,
+      "module_doc": "SetupTab \u2014 Advanced Radio, Audio Tools, Profile, Bootstrap.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "filedialog",
+            "messagebox",
+            "ttk"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "typing",
+          "names": [
+            "TYPE_CHECKING"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "engine.sa818_client",
+          "names": [
+            "CTCSS"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "widgets",
+          "names": [
+            "add_row",
+            "scrollable_frame"
+          ],
+          "lineno": 20
+        }
+      ],
+      "constants": [],
+      "functions": [],
+      "classes": [
+        {
+          "name": "SetupTab",
+          "lineno": 26,
+          "end_lineno": 411,
+          "bases": [
+            "ttk.Frame"
+          ],
+          "decorators": [],
+          "doc": "Advanced setup and tools tab.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 29,
+              "end_lineno": 32,
+              "args": [
+                "self",
+                "parent",
+                "app"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build",
+              "lineno": 38,
+              "end_lineno": 52,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_left",
+              "lineno": 54,
+              "end_lineno": 194,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_build_right",
+              "lineno": 196,
+              "end_lineno": 292,
+              "args": [
+                "self",
+                "parent"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_apply_filters",
+              "lineno": 298,
+              "end_lineno": 303,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_set_volume",
+              "lineno": 305,
+              "end_lineno": 306,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_apply_tail",
+              "lineno": 308,
+              "end_lineno": 309,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_play_test_tone",
+              "lineno": 311,
+              "end_lineno": 315,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_stop_audio",
+              "lineno": 317,
+              "end_lineno": 318,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_play_manual_aprs",
+              "lineno": 320,
+              "end_lineno": 321,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_tx_channel_sweep",
+              "lineno": 323,
+              "end_lineno": 324,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_auto_detect_rx",
+              "lineno": 326,
+              "end_lineno": 327,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_save_profile",
+              "lineno": 329,
+              "end_lineno": 337,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_load_profile",
+              "lineno": 339,
+              "end_lineno": 346,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_reset_defaults",
+              "lineno": 348,
+              "end_lineno": 351,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_bootstrap",
+              "lineno": 353,
+              "end_lineno": 354,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_two_radio_diagnostic",
+              "lineno": 356,
+              "end_lineno": 357,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "apply_profile",
+              "lineno": 363,
+              "end_lineno": 384,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": "Load profile values into setup tab widgets."
+            },
+            {
+              "name": "collect_profile",
+              "lineno": 386,
+              "end_lineno": 407,
+              "args": [
+                "self",
+                "p"
+              ],
+              "decorators": [],
+              "doc": "Write setup tab widget values back into profile object."
+            },
+            {
+              "name": "tts_enabled",
+              "lineno": 410,
+              "end_lineno": 411,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "app/ui/widgets.py",
+      "bytes": 12534,
+      "lines": 320,
+      "module_doc": "Shared UI widget helpers and reusable components.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "",
+          "names": [
+            "math"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Optional"
+          ],
+          "lineno": 7
+        },
+        {
+          "module": "",
+          "names": [
+            "numpy"
+          ],
+          "lineno": 9
+        },
+        {
+          "module": "",
+          "names": [
+            "tkinter"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "tkinter",
+          "names": [
+            "ttk"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "tkinter.scrolledtext",
+          "names": [
+            "ScrolledText"
+          ],
+          "lineno": 12
+        }
+      ],
+      "constants": [
+        "_WF_LUT"
+      ],
+      "functions": [
+        {
+          "name": "add_row",
+          "lineno": 19,
+          "end_lineno": 21,
+          "args": [
+            "frame",
+            "label",
+            "widget",
+            "row"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "scrollable_frame",
+          "lineno": 24,
+          "end_lineno": 52,
+          "args": [
+            "parent"
+          ],
+          "decorators": [],
+          "doc": "Return (canvas, scrollbar, inner_frame) for a scrollable tab."
+        },
+        {
+          "name": "_build_wf_lut",
+          "lineno": 89,
+          "end_lineno": 107,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "BoundedLog",
+          "lineno": 59,
+          "end_lineno": 79,
+          "bases": [
+            "ScrolledText"
+          ],
+          "decorators": [],
+          "doc": "ScrolledText that keeps at most max_lines lines to prevent memory growth.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 64,
+              "end_lineno": 65,
+              "args": [
+                "self",
+                "parent",
+                "**kwargs"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "append",
+              "lineno": 67,
+              "end_lineno": 79,
+              "args": [
+                "self",
+                "msg"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "WaterfallCanvas",
+          "lineno": 112,
+          "end_lineno": 182,
+          "bases": [
+            "tk.Canvas"
+          ],
+          "decorators": [],
+          "doc": "Rolling waterfall display. Call push_spectrum(row_array) to update.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 115,
+              "end_lineno": 124,
+              "args": [
+                "self",
+                "parent",
+                "width",
+                "height",
+                "**kwargs"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_resize",
+              "lineno": 126,
+              "end_lineno": 136,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "push_spectrum",
+              "lineno": 138,
+              "end_lineno": 145,
+              "args": [
+                "self",
+                "rate",
+                "mono"
+              ],
+              "decorators": [],
+              "doc": "Compute spectrum row from audio samples and push to waterfall."
+            },
+            {
+              "name": "_spectrum_row",
+              "lineno": 147,
+              "end_lineno": 173,
+              "args": [
+                "self",
+                "rate",
+                "mono"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_redraw",
+              "lineno": 175,
+              "end_lineno": 182,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        },
+        {
+          "name": "AprsMapCanvas",
+          "lineno": 189,
+          "end_lineno": 319,
+          "bases": [
+            "tk.Canvas"
+          ],
+          "decorators": [],
+          "doc": "Offline lat/lon map with zoom + pan.",
+          "methods": [
+            {
+              "name": "__init__",
+              "lineno": 192,
+              "end_lineno": 207,
+              "args": [
+                "self",
+                "parent",
+                "**kwargs"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "set_on_pick",
+              "lineno": 209,
+              "end_lineno": 210,
+              "args": [
+                "self",
+                "cb"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "add_point",
+              "lineno": 212,
+              "end_lineno": 224,
+              "args": [
+                "self",
+                "lat",
+                "lon",
+                "label"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "clear",
+              "lineno": 226,
+              "end_lineno": 232,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "last_position",
+              "lineno": 235,
+              "end_lineno": 236,
+              "args": [
+                "self"
+              ],
+              "decorators": [
+                "property"
+              ],
+              "doc": ""
+            },
+            {
+              "name": "_latlon_to_xy",
+              "lineno": 238,
+              "end_lineno": 243,
+              "args": [
+                "self",
+                "lat",
+                "lon",
+                "w",
+                "h"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_xy_to_latlon",
+              "lineno": 245,
+              "end_lineno": 252,
+              "args": [
+                "self",
+                "x",
+                "y",
+                "w",
+                "h"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_draw",
+              "lineno": 254,
+              "end_lineno": 276,
+              "args": [
+                "self"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_press",
+              "lineno": 278,
+              "end_lineno": 279,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_drag",
+              "lineno": 281,
+              "end_lineno": 288,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_release",
+              "lineno": 290,
+              "end_lineno": 307,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": ""
+            },
+            {
+              "name": "_on_wheel",
+              "lineno": 309,
+              "end_lineno": 319,
+              "args": [
+                "self",
+                "event"
+              ],
+              "decorators": [],
+              "doc": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "main.py",
+      "bytes": 1805,
+      "lines": 63,
+      "module_doc": "HAM HAT Control Center v2 \u2014 entry point.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 4
+        },
+        {
+          "module": "",
+          "names": [
+            "logging"
+          ],
+          "lineno": 6
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 7
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 9
+        }
+      ],
+      "constants": [
+        "_HERE"
+      ],
+      "functions": [
+        {
+          "name": "_configure_logging",
+          "lineno": 19,
+          "end_lineno": 27,
+          "args": [
+            "level"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 30,
+          "end_lineno": 58,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/bootstrap_third_party.py",
+      "bytes": 4247,
+      "lines": 132,
+      "module_doc": "Install core Python requirements and optional third-party SA818 tools.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "shutil"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "",
+          "names": [
+            "subprocess"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 20
+        }
+      ],
+      "constants": [
+        "REPOS",
+        "_HERE",
+        "_ROOT"
+      ],
+      "functions": [
+        {
+          "name": "_run",
+          "lineno": 31,
+          "end_lineno": 34,
+          "args": [
+            "cmd",
+            "cwd"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_pip",
+          "lineno": 37,
+          "end_lineno": 38,
+          "args": [
+            "*packages"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "install_core_requirements",
+          "lineno": 41,
+          "end_lineno": 48,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "install_pycaw",
+          "lineno": 51,
+          "end_lineno": 53,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "clone_or_pull",
+          "lineno": 56,
+          "end_lineno": 66,
+          "args": [
+            "name",
+            "url",
+            "target_root"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "copy_local_fallback",
+          "lineno": 69,
+          "end_lineno": 80,
+          "args": [
+            "target_root"
+          ],
+          "decorators": [],
+          "doc": "Copy bundled resource snapshots when offline."
+        },
+        {
+          "name": "install_sa818_package",
+          "lineno": 83,
+          "end_lineno": 87,
+          "args": [
+            "target_root"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 90,
+          "end_lineno": 127,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/capture_wav_worker.py",
+      "bytes": 2016,
+      "lines": 71,
+      "module_doc": "Capture audio from a selected input device and write a WAV \u2014 standalone subprocess worker.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "",
+          "names": [
+            "struct"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 13
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 14
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_setup_path",
+          "lineno": 17,
+          "end_lineno": 20,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_args",
+          "lineno": 23,
+          "end_lineno": 31,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 34,
+          "end_lineno": 66,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/generate_agent_onboarding_pack.py",
+      "bytes": 10092,
+      "lines": 335,
+      "module_doc": "Generate AI onboarding artifacts for this repository.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "",
+          "names": [
+            "ast"
+          ],
+          "lineno": 14
+        },
+        {
+          "module": "",
+          "names": [
+            "json"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "dataclasses",
+          "names": [
+            "dataclass",
+            "asdict"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "typing",
+          "names": [
+            "Any"
+          ],
+          "lineno": 18
+        }
+      ],
+      "constants": [
+        "ROOT",
+        "ROOT_FILES",
+        "SKIP_DIRS",
+        "TARGET_DIRS"
+      ],
+      "functions": [
+        {
+          "name": "_safe_read",
+          "lineno": 67,
+          "end_lineno": 68,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_short_doc",
+          "lineno": 71,
+          "end_lineno": 74,
+          "args": [
+            "node"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_unparse",
+          "lineno": 77,
+          "end_lineno": 83,
+          "args": [
+            "node"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_decorators",
+          "lineno": 86,
+          "end_lineno": 92,
+          "args": [
+            "node"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_func_info",
+          "lineno": 95,
+          "end_lineno": 112,
+          "args": [
+            "node"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_class_info",
+          "lineno": 115,
+          "end_lineno": 128,
+          "args": [
+            "node"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_imports",
+          "lineno": 131,
+          "end_lineno": 150,
+          "args": [
+            "tree"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_constants",
+          "lineno": 153,
+          "end_lineno": 164,
+          "args": [
+            "tree"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "analyze_python_file",
+          "lineno": 167,
+          "end_lineno": 191,
+          "args": [
+            "path"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "iter_python_files",
+          "lineno": 194,
+          "end_lineno": 207,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_index",
+          "lineno": 210,
+          "end_lineno": 249,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "build_markdown",
+          "lineno": 252,
+          "end_lineno": 318,
+          "args": [
+            "index"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 321,
+          "end_lineno": 329,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": [
+        {
+          "name": "FuncInfo",
+          "lineno": 28,
+          "end_lineno": 34,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ClassInfo",
+          "lineno": 38,
+          "end_lineno": 45,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "ImportInfo",
+          "lineno": 49,
+          "end_lineno": 52,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        },
+        {
+          "name": "FileInfo",
+          "lineno": 56,
+          "end_lineno": 64,
+          "bases": [],
+          "decorators": [
+            "dataclass"
+          ],
+          "doc": "",
+          "methods": []
+        }
+      ]
+    },
+    {
+      "path": "scripts/play_wav_worker.py",
+      "bytes": 2007,
+      "lines": 69,
+      "module_doc": "Play WAV on a specific output device \u2014 standalone subprocess worker.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 12
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 13
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_setup_path",
+          "lineno": 16,
+          "end_lineno": 19,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_args",
+          "lineno": 22,
+          "end_lineno": 27,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 30,
+          "end_lineno": 64,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/rx_score_worker.py",
+      "bytes": 2005,
+      "lines": 74,
+      "module_doc": "Capture audio and print a voice-activity score \u2014 standalone subprocess worker.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 8
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 10
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 11
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 12
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_setup_path",
+          "lineno": 15,
+          "end_lineno": 18,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_args",
+          "lineno": 21,
+          "end_lineno": 26,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "voice_activity_score",
+          "lineno": 29,
+          "end_lineno": 38,
+          "args": [
+            "samples"
+          ],
+          "decorators": [],
+          "doc": "Weighted combination of RMS energy and 95th-percentile amplitude."
+        },
+        {
+          "name": "main",
+          "lineno": 41,
+          "end_lineno": 69,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/two_radio_diagnostic.py",
+      "bytes": 9802,
+      "lines": 264,
+      "module_doc": "Two-radio APRS TX/RX reliability diagnostic.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 16
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "",
+          "names": [
+            "threading"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "",
+          "names": [
+            "time"
+          ],
+          "lineno": 21
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 22
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 23
+        },
+        {
+          "module": "app.engine.aprs_modem",
+          "names": [
+            "decode_ax25_from_samples",
+            "write_aprs_wav"
+          ],
+          "lineno": 32
+        },
+        {
+          "module": "app.engine.models",
+          "names": [
+            "RadioConfig"
+          ],
+          "lineno": 33
+        },
+        {
+          "module": "app.engine.sa818_client",
+          "names": [
+            "SA818Client",
+            "SA818Error"
+          ],
+          "lineno": 34
+        }
+      ],
+      "constants": [
+        "_HERE",
+        "_ROOT"
+      ],
+      "functions": [
+        {
+          "name": "_build_radio_cfg",
+          "lineno": 41,
+          "end_lineno": 42,
+          "args": [
+            "freq",
+            "squelch",
+            "bw"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_serial_ptt_stress",
+          "lineno": 45,
+          "end_lineno": 60,
+          "args": [
+            "client",
+            "loops",
+            "ptt_line",
+            "active_high"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_record_into",
+          "lineno": 63,
+          "end_lineno": 73,
+          "args": [
+            "path",
+            "seconds",
+            "device",
+            "rate"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_play_wav",
+          "lineno": 76,
+          "end_lineno": 82,
+          "args": [
+            "path",
+            "device",
+            "rate"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_decode_wav",
+          "lineno": 85,
+          "end_lineno": 91,
+          "args": [
+            "path",
+            "rate"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "run",
+          "lineno": 98,
+          "end_lineno": 214,
+          "args": [
+            "args"
+          ],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "_build_parser",
+          "lineno": 221,
+          "end_lineno": 255,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 258,
+          "end_lineno": 259,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    },
+    {
+      "path": "scripts/tx_wav_worker.py",
+      "bytes": 4516,
+      "lines": 128,
+      "module_doc": "Transmit a WAV file through SA818 with explicit PTT control \u2014 standalone worker.",
+      "imports": [
+        {
+          "module": "__future__",
+          "names": [
+            "annotations"
+          ],
+          "lineno": 15
+        },
+        {
+          "module": "",
+          "names": [
+            "argparse"
+          ],
+          "lineno": 17
+        },
+        {
+          "module": "",
+          "names": [
+            "sys"
+          ],
+          "lineno": 18
+        },
+        {
+          "module": "",
+          "names": [
+            "time"
+          ],
+          "lineno": 19
+        },
+        {
+          "module": "",
+          "names": [
+            "wave"
+          ],
+          "lineno": 20
+        },
+        {
+          "module": "pathlib",
+          "names": [
+            "Path"
+          ],
+          "lineno": 21
+        }
+      ],
+      "constants": [],
+      "functions": [
+        {
+          "name": "_setup_path",
+          "lineno": 24,
+          "end_lineno": 27,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "parse_args",
+          "lineno": 30,
+          "end_lineno": 51,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        },
+        {
+          "name": "main",
+          "lineno": 54,
+          "end_lineno": 123,
+          "args": [],
+          "decorators": [],
+          "doc": ""
+        }
+      ],
+      "classes": []
+    }
+  ]
+}

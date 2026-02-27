@@ -15,6 +15,7 @@ v2 improvements over v1:
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 import wave
@@ -24,6 +25,15 @@ from typing import Optional
 import numpy as np
 
 from .models import DecodedPacket
+
+# Use scipy fftconvolve when available (significantly faster for large FIR kernels)
+try:
+    from scipy.signal import fftconvolve as _fftconvolve
+    def _convolve(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        return _fftconvolve(a, b, mode="same")
+except ImportError:
+    def _convolve(a: np.ndarray, b: np.ndarray) -> np.ndarray:  # type: ignore[misc]
+        return np.convolve(a, b, mode="same")
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +114,7 @@ def nrzi_encode(bits: list[int]) -> list[int]:
 
 
 def afsk_from_nrzi(nrzi: list[int], sample_rate: int = 48000, tx_gain: float = 0.6) -> bytes:
-    """Vectorized AFSK encoder. Returns 16-bit PCM mono bytes."""
+    """Fully vectorized AFSK encoder (single np.sin call). Returns 16-bit PCM mono bytes."""
     if not nrzi:
         return b""
 
@@ -113,23 +123,38 @@ def afsk_from_nrzi(nrzi: list[int], sample_rate: int = 48000, tx_gain: float = 0
     BAUD = 1200.0
     amp = float(np.clip(tx_gain, 0.05, 0.95)) * 32767.0
     sps = float(sample_rate) / BAUD
-    total_samples = max(1, int(round(len(nrzi) * sps)))
-
-    # Build sample array bit-by-bit but vectorize each bit's samples
-    out = np.empty(total_samples, dtype=np.float32)
-    phase = 0.0
-    s_idx = 0
     two_pi = 2.0 * math.pi
 
-    for bit_idx, level in enumerate(nrzi):
-        freq = MARK if level else SPACE
-        bit_start = int(round(bit_idx * sps))
-        bit_end = int(round((bit_idx + 1) * sps))
-        n = max(1, bit_end - bit_start)
-        t = np.arange(n, dtype=np.float64)
-        out[s_idx: s_idx + n] = np.sin(phase + two_pi * freq * t / sample_rate).astype(np.float32)
-        phase = math.fmod(phase + two_pi * freq * n / sample_rate, two_pi)
-        s_idx += n
+    nrzi_arr = np.asarray(nrzi, dtype=np.int32)
+    nbits = len(nrzi_arr)
+
+    # Sample boundaries — same rounding as original for bit-accurate output
+    bit_idx_f = np.arange(nbits, dtype=np.float64)
+    bit_starts = np.round(bit_idx_f * sps).astype(np.int64)
+    bit_ends = np.round((bit_idx_f + 1.0) * sps).astype(np.int64)
+    sample_counts = np.maximum(1, bit_ends - bit_starts)   # samples per bit
+    total_samples = int(bit_ends[-1])
+
+    # Frequency per bit (MARK=1, SPACE=0)
+    freqs = np.where(nrzi_arr == 1, MARK, SPACE)           # (nbits,)
+
+    # Cumulative phase at the start of each bit (phase continuity)
+    phase_advance = two_pi * freqs * sample_counts / sample_rate  # rad per bit
+    initial_phases = np.empty(nbits, dtype=np.float64)
+    initial_phases[0] = 0.0
+    np.cumsum(phase_advance[:-1], out=initial_phases[1:])
+
+    # Expand per-bit values to per-sample via np.repeat
+    sample_initial_phases = np.repeat(initial_phases, sample_counts)  # (total_samples,)
+    sample_freqs = np.repeat(freqs, sample_counts)                    # (total_samples,)
+    bit_start_per_sample = np.repeat(bit_starts, sample_counts)       # (total_samples,)
+
+    # Within-bit sample position [0, 1, ..., n-1] for each bit block
+    within_bit = np.arange(total_samples, dtype=np.float64) - bit_start_per_sample
+
+    # Single sin call over all samples
+    phases = sample_initial_phases + two_pi * sample_freqs * within_bit / sample_rate
+    out = np.sin(phases).astype(np.float32)
 
     # Envelope shaping (1 ms attack/release)
     attack = max(1, int(0.001 * sample_rate))
@@ -301,22 +326,106 @@ def parse_aprs_message_info(info: str) -> Optional[tuple[str, str, Optional[str]
         return None
 
 
-def parse_aprs_position_info(info: str) -> Optional[tuple[float, float, str]]:
-    """Return (lat, lon, comment) for common uncompressed APRS position formats."""
+def parse_aprs_position_info(
+    info: str, destination: str = ""
+) -> Optional[tuple[float, float, str]]:
+    """Return (lat, lon, comment) for uncompressed, compressed, and Mic-E APRS positions."""
     if not info:
         return None
     dti = info[0]
-    if dti not in ("!", "=", "/", "@"):
+
+    # --- Uncompressed (existing format: DDMMssH/DDDMMssH) ---
+    if dti in ("!", "=", "/", "@"):
+        payload = info[8:] if dti in ("/", "@") else info[1:]
+        if len(payload) >= 19:
+            lat = _parse_aprs_lat(payload[0:8])
+            lon = _parse_aprs_lon(payload[9:18])
+            if lat is not None and lon is not None:
+                comment = payload[19:] if len(payload) > 19 else ""
+                return lat, lon, comment
+
+        # --- Compressed (base-91, 13 chars after DTI) ---
+        if len(payload) >= 10:
+            result = _parse_compressed_position(payload)
+            if result is not None:
+                return result
+
+    # --- Mic-E (DTI is ` or ') ---
+    if dti in ("`", "'") and destination:
+        return _parse_mice_position(destination, info)
+
+    return None
+
+
+def _parse_compressed_position(payload: str) -> Optional[tuple[float, float, str]]:
+    """Parse base-91 compressed APRS position from the payload (after DTI/timestamp)."""
+    if len(payload) < 10:
         return None
-    payload = info[8:] if dti in ("/", "@") else info[1:]
-    if len(payload) < 19:
+    # Validate: chars 1-8 must be printable base-91 (ASCII 33-123)
+    for ch in payload[1:9]:
+        if not (33 <= ord(ch) <= 123):
+            return None
+    try:
+        # payload[0] = symbol table, [1:5] = lat (4 b91 chars), [5:9] = lon, [9] = symbol
+        lat_v = sum((ord(payload[i + 1]) - 33) * (91 ** (3 - i)) for i in range(4))
+        lon_v = sum((ord(payload[i + 5]) - 33) * (91 ** (3 - i)) for i in range(4))
+        lat = 90.0 - lat_v / 380926.0
+        lon = -180.0 + lon_v / 190463.0
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            return None
+        comment = payload[10:] if len(payload) > 10 else ""
+        return lat, lon, comment
+    except Exception:
         return None
-    lat = _parse_aprs_lat(payload[0:8])
-    lon = _parse_aprs_lon(payload[9:18])
-    if lat is None or lon is None:
+
+
+def _mic_e_digit_flag(c: str) -> tuple[int, bool]:
+    """Return (digit, flag) for a Mic-E destination character."""
+    v = ord(c)
+    if 48 <= v <= 57: return v - 48, False   # '0'-'9'
+    if 65 <= v <= 74: return v - 65, False   # 'A'-'J' (deprecated)
+    if 80 <= v <= 89: return v - 80, True    # 'P'-'Y' (flag bit set)
+    return 0, False                           # 'K','L','Z', other
+
+
+def _parse_mice_position(dest: str, info: str) -> Optional[tuple[float, float, str]]:
+    """Decode Mic-E position from destination address + info field."""
+    if len(dest) < 6 or len(info) < 8:
         return None
-    comment = payload[19:] if len(payload) > 19 else ""
-    return lat, lon, comment
+    try:
+        d = dest[:6]
+        d1, _ = _mic_e_digit_flag(d[0])
+        d2, _ = _mic_e_digit_flag(d[1])
+        d3, _ = _mic_e_digit_flag(d[2])
+        d4, south = _mic_e_digit_flag(d[3])
+        d5, lon_offset = _mic_e_digit_flag(d[4])
+        d6, west = _mic_e_digit_flag(d[5])
+
+        lat_deg = d1 * 10 + d2
+        lat_min = d3 * 10 + d4 + (d5 * 10 + d6) / 100.0
+        lat = lat_deg + lat_min / 60.0
+        if south:
+            lat = -lat
+
+        lon_d = ord(info[1]) - 28
+        lon_m = ord(info[2]) - 28
+        lon_h = ord(info[3]) - 28
+        if lon_offset:
+            lon_d += 100
+        if 180 <= lon_d <= 189:
+            lon_d -= 80
+        if lon_m >= 60:
+            lon_m -= 60
+        lon = lon_d + lon_m / 60.0 + lon_h / 6000.0
+        if west:
+            lon = -lon
+
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            return None
+        comment = info[8:].strip() if len(info) > 8 else ""
+        return lat, lon, comment
+    except Exception:
+        return None
 
 
 def parse_group_wire_text(text: str) -> Optional[tuple[str, str, Optional[int], Optional[int]]]:
@@ -392,15 +501,26 @@ def decode_ax25_from_samples(rate: int, mono: np.ndarray) -> list[DecodedPacket]
 # CRC (single definition — audio_tools imports from here)
 # ---------------------------------------------------------------------------
 
+def _build_crc16_table() -> tuple:
+    table = []
+    for i in range(256):
+        v = i
+        for _ in range(8):
+            if v & 1:
+                v = (v >> 1) ^ 0x8408
+            else:
+                v >>= 1
+        table.append(v)
+    return tuple(table)
+
+
+_CRC16_TABLE: tuple = _build_crc16_table()
+
+
 def crc16_x25(data: bytes) -> int:
     crc = 0xFFFF
     for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0x8408
-            else:
-                crc >>= 1
+        crc = (crc >> 8) ^ _CRC16_TABLE[(crc ^ byte) & 0xFF]
     return (~crc) & 0xFFFF
 
 
@@ -507,6 +627,7 @@ def _parse_aprs_lon(token: str) -> Optional[float]:
 
 # --- DSP helpers ---
 
+@functools.lru_cache(maxsize=16)
 def _lowpass_kernel(rate: int, cutoff_hz: float, taps: int = 81) -> np.ndarray:
     if taps % 2 == 0:
         taps += 1
@@ -526,12 +647,13 @@ def _preprocess_samples(samples: np.ndarray, rate: int) -> np.ndarray:
         return x
     x = x - float(np.mean(x))
     if len(x) >= 256:
-        lp_lo = np.convolve(x, _lowpass_kernel(rate, 700.0, 101), mode="same")
+        lp_lo = _convolve(x, _lowpass_kernel(rate, 700.0, 101))
         x = x - lp_lo.astype(np.float32, copy=False)
-        x = np.convolve(x, _lowpass_kernel(rate, 2600.0, 101), mode="same").astype(np.float32, copy=False)
-    peak = float(np.max(np.abs(x)))
-    if peak > 1e-6:
-        x = x / peak
+        x = _convolve(x, _lowpass_kernel(rate, 2600.0, 101)).astype(np.float32, copy=False)
+    # RMS AGC: normalize to -12 dBFS target (0.25 linear), then clip impulsive noise
+    rms = float(np.sqrt(np.mean(x * x)))
+    if rms > 1e-6:
+        x = np.clip(x * (0.25 / rms), -1.0, 1.0)
     x = np.tanh(2.2 * x) / math.tanh(2.2)
     return x.astype(np.float32, copy=False)
 
@@ -546,8 +668,8 @@ def _afsk_discriminator(samples: np.ndarray, rate: int, mark_hz: float = 1200.0,
     mark_mix = s64 * np.exp(-1j * w_mark * n)
     space_mix = s64 * np.exp(-1j * w_space * n)
     lpf = _lowpass_kernel(rate, 800.0, 81).astype(np.float64)
-    mark_bb = np.convolve(mark_mix, lpf, mode="same")
-    space_bb = np.convolve(space_mix, lpf, mode="same")
+    mark_bb = _convolve(mark_mix, lpf)
+    space_bb = _convolve(space_mix, lpf)
     demod = (np.abs(mark_bb) ** 2) - (np.abs(space_bb) ** 2)
     demod -= np.mean(demod)
     std = float(np.std(demod))
@@ -569,28 +691,32 @@ def _extract_nrzi_levels(demod: np.ndarray, spb: float, offset: int, invert_tone
 
 
 def _nrzi_to_bits(levels: list[int]) -> list[int]:
-    bits: list[int] = []
     if not levels:
-        return bits
-    prev = levels[0]
-    bits.append(1)
-    for lv in levels[1:]:
-        bits.append(1 if lv == prev else 0)
-        prev = lv
-    return bits
+        return []
+    arr = np.asarray(levels, dtype=np.int8)
+    bits = np.empty(len(arr), dtype=np.int8)
+    bits[0] = 1
+    bits[1:] = (arr[1:] == arr[:-1]).astype(np.int8)
+    return bits.tolist()
+
+
+_FLAG_ARR = np.array(FLAG_BITS, dtype=np.int8)
 
 
 def _extract_hdlc_frames(bits: list[int]) -> list[bytes]:
     frames: list[bytes] = []
     if len(bits) < 24:
         return frames
-    flags: list[int] = [i for i in range(len(bits) - 7) if bits[i:i + 8] == FLAG_BITS]
-    if len(flags) < 2:
+    arr = np.asarray(bits, dtype=np.int8)
+    # Vectorized sliding-window flag search (numpy >= 1.20)
+    windows = np.lib.stride_tricks.sliding_window_view(arr, 8)
+    flag_positions: list[int] = np.where(np.all(windows == _FLAG_ARR, axis=1))[0].tolist()
+    if len(flag_positions) < 2:
         return frames
-    for i in range(len(flags) - 1):
-        start = flags[i] + 8
-        end = flags[i + 1]
-        if end <= start:
+    for i in range(len(flag_positions) - 1):
+        start = flag_positions[i] + 8
+        end = flag_positions[i + 1]
+        if end - start < 136:  # 17 bytes minimum → skip preamble runs & undersized segments
             continue
         frame_bits = _remove_bit_stuffing(bits[start:end])
         if frame_bits is None:
@@ -623,15 +749,15 @@ def _remove_bit_stuffing(bits: list[int]) -> Optional[list[int]]:
     return out
 
 
+_LSB_WEIGHTS = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint16)
+
+
 def _bits_to_bytes_lsb(bits: list[int]) -> bytes:
     n = len(bits) - (len(bits) % 8)
-    out = bytearray()
-    for i in range(0, n, 8):
-        b = 0
-        for j in range(8):
-            b |= (bits[i + j] & 1) << j
-        out.append(b)
-    return bytes(out)
+    if n == 0:
+        return b""
+    arr = np.asarray(bits[:n], dtype=np.uint16).reshape(-1, 8)
+    return (arr @ _LSB_WEIGHTS).astype(np.uint8).tobytes()
 
 
 def _decode_ax25_frame(frame: bytes) -> Optional[DecodedPacket]:

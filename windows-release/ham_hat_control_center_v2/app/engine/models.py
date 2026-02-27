@@ -55,7 +55,7 @@ class AprsConfig:
     destination: str = "APRS"
     path: str = "WIDE1-1"
     tx_gain: float = 0.34
-    preamble_flags: int = 240
+    preamble_flags: int = 60
     trailing_flags: int = 16
     tx_repeats: int = 1
     symbol_table: str = "/"
@@ -149,7 +149,7 @@ class AppProfile:
     aprs_dest: str = "APRS"
     aprs_path: str = "WIDE1-1"
     aprs_tx_gain: float = 0.34
-    aprs_preamble_flags: int = 240
+    aprs_preamble_flags: int = 60
     aprs_tx_repeats: int = 1
     aprs_tx_reinit: bool = True
     aprs_symbol_table: str = "/"
