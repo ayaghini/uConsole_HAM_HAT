@@ -1,0 +1,8 @@
+pyserial>=3.5
+numpy>=1.24
+sounddevice>=0.4.6
+sv-ttk>=2.5.5
+# Optional: faster FIR convolution in APRS decoder (~10-20x speedup vs np.convolve)
+scipy>=1.10
+# Optional: Windows system audio volume control
+pycaw>=20240523

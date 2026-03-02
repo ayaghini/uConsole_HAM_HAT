@@ -32,7 +32,7 @@
   "aprs_rx_duration": 10.0,
   "aprs_rx_chunk": 8.0,
   "aprs_rx_trim_db": -4.326923076923077,
-  "aprs_rx_os_level": 8,
+  "aprs_rx_os_level": 65,
   "aprs_rx_auto": true,
   "output_device_name": "Speakers (2- USB Audio Device)",
   "input_device_name": "Microphone (2- USB Audio Device)",

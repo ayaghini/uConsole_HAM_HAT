@@ -1,0 +1,367 @@
+{
+  "project": {
+    "name": "HAM HAT Control Center v2",
+    "type": "Desktop GUI control center",
+    "entrypoint": "main.py",
+    "primary_platform": "Windows",
+    "domain": [
+      "SA818 serial radio control",
+      "APRS message/position TX/RX",
+      "Audio routing and PTT orchestration"
+    ],
+    "notable_defaults": {
+      "aprs_preamble_flags": 60
+    }
+  },
+  "startup_sequence": [
+    "main.py::main() parses verbosity and configures logging",
+    "HamHatApp(app_dir) is instantiated from app/app.py",
+    "AppState creates engine instances, queue, and tk variables",
+    "UI tabs are built and callback wiring is installed",
+    "Profile is loaded and applied to tabs",
+    "Queue drain + visualizer + autosave loops are scheduled via after()",
+    "Startup tasks refresh ports/audio and optionally auto-select audio pair"
+  ],
+  "architecture": {
+    "pattern": "UI-thread coordinator + worker-thread engines + event queue",
+    "ui_thread_rule": "All tkinter interaction must occur on main thread only",
+    "worker_rule": "Workers must operate on plain snapshots, never tk vars",
+    "event_dispatch_interval_ms": 40,
+    "visualizer_interval_ms": 120,
+    "autosave_interval_ms": 30000
+  },
+  "source_of_truth_files": {
+    "orchestration": "app/app.py",
+    "shared_state": "app/app_state.py",
+    "data_contracts": "app/engine/models.py",
+    "aprs_runtime": "app/engine/aprs_engine.py",
+    "aprs_codec": "app/engine/aprs_modem.py",
+    "radio_protocol": "app/engine/sa818_client.py",
+    "radio_facade": "app/engine/radio_ctrl.py",
+    "audio_runtime": "app/engine/audio_router.py",
+    "profile_persistence": "app/engine/profile.py",
+    "comms_logic": "app/engine/comms_mgr.py"
+  },
+  "file_roles": {
+    "app_core": [
+      {
+        "path": "app/app.py",
+        "role": "Main coordinator and action surface",
+        "key_methods": [
+          "connect",
+          "disconnect",
+          "apply_radio",
+          "send_aprs_message",
+          "send_group_message",
+          "send_intro",
+          "start_rx_monitor",
+          "stop_rx_monitor",
+          "_handle_packet",
+          "save_profile",
+          "load_profile",
+          "_make_tx_snapshot"
+        ]
+      },
+      {
+        "path": "app/app_state.py",
+        "role": "Creates and holds engines, event queue, and tk vars"
+      }
+    ],
+    "engine": [
+      {
+        "path": "app/engine/models.py",
+        "role": "Typed dataclasses/contracts used across UI and engine",
+        "important_types": [
+          "AppProfile",
+          "RadioConfig",
+          "PttConfig",
+          "ChatMessage",
+          "DecodedPacket",
+          "AprsConfig",
+          "ReliableConfig"
+        ]
+      },
+      {
+        "path": "app/engine/aprs_engine.py",
+        "role": "APRS TX/RX runtime logic, ACK/retry, dedupe, monitor loops",
+        "notes": [
+          "RX loop applies energy gate to skip silent chunks",
+          "TX path deletes temporary APRS WAV files after transmit"
+        ]
+      },
+      {
+        "path": "app/engine/aprs_modem.py",
+        "role": "APRS payload build/parse and AX.25/AFSK encode-decode DSP",
+        "notes": [
+          "Position parsing supports uncompressed, compressed base91, and Mic-E",
+          "Uses scipy.signal.fftconvolve when SciPy is available, otherwise numpy fallback"
+        ]
+      },
+      {
+        "path": "app/engine/radio_ctrl.py",
+        "role": "Thread-safe wrapper; radio config push/pop restore semantics"
+      },
+      {
+        "path": "app/engine/sa818_client.py",
+        "role": "Low-level serial AT command protocol and modem line/PTT control"
+      },
+      {
+        "path": "app/engine/audio_router.py",
+        "role": "Audio playback/capture orchestration and PTT timing integration"
+      },
+      {
+        "path": "app/engine/audio_tools.py",
+        "role": "Device enumeration and audio utilities"
+      },
+      {
+        "path": "app/engine/comms_mgr.py",
+        "role": "Contacts/groups/heard/threads/unread/message store"
+      },
+      {
+        "path": "app/engine/profile.py",
+        "role": "Load/save AppProfile JSON with validation and clamping"
+      }
+    ],
+    "ui": [
+      {
+        "path": "app/ui/main_tab.py",
+        "owns": [
+          "serial connection controls",
+          "radio parameter controls",
+          "audio selection",
+          "ptt controls",
+          "radio log"
+        ]
+      },
+      {
+        "path": "app/ui/aprs_tab.py",
+        "owns": [
+          "aprs identity",
+          "message tx panel",
+          "position tx panel",
+          "rx monitor controls",
+          "map + aprs monitor"
+        ]
+      },
+      {
+        "path": "app/ui/comms_tab.py",
+        "owns": [
+          "contacts/groups management",
+          "heard stations",
+          "thread list",
+          "message compose/send",
+          "intro send"
+        ]
+      },
+      {
+        "path": "app/ui/setup_tab.py",
+        "owns": [
+          "advanced filters/tones/volume",
+          "tools and diagnostics",
+          "profile import/export/reset",
+          "tts toggle"
+        ]
+      },
+      {
+        "path": "app/ui/widgets.py",
+        "owns": [
+          "scrollable frame helper",
+          "bounded log",
+          "waterfall canvas",
+          "offline aprs map canvas"
+        ]
+      }
+    ],
+    "scripts": [
+      "scripts/bootstrap_third_party.py",
+      "scripts/two_radio_diagnostic.py",
+      "scripts/play_wav_worker.py",
+      "scripts/capture_wav_worker.py",
+      "scripts/rx_score_worker.py",
+      "scripts/tx_wav_worker.py",
+      "scripts/generate_agent_onboarding_pack.py"
+    ]
+  },
+  "active_event_contract": {
+    "producer_location": "app/app.py and engine callbacks wired in HamHatApp._wire_callbacks/_wire_comms",
+    "consumer_location": "HamHatApp._dispatch",
+    "event_types": [
+      "_LogEvt",
+      "_AprsLogEvt",
+      "_ErrorEvt",
+      "_ConnectEvt",
+      "_DisconnectEvt",
+      "_PacketEvt",
+      "_AudioPairEvt",
+      "_InputLevelEvt",
+      "_OutputLevelEvt",
+      "_WaterfallEvt",
+      "_RxClipEvt",
+      "_HeardEvt",
+      "_ChatMsgEvt",
+      "_ContactsEvt",
+      "_StatusEvt",
+      "_SuggestRxOsLevelEvt"
+    ],
+    "note": "app/ui/events.py exists but is not the primary queue type currently used by app.py"
+  },
+  "critical_invariants": [
+    "No tkinter access from worker threads",
+    "Capture tk vars into plain values before worker launch",
+    "APRS TX/RX temporary config must restore user radio config via push/pop",
+    "Thread key consistency is required for CommsTab thread rendering",
+    "Any AppProfile field addition must update models.py + profile.py + tab apply/collect paths",
+    "Windows audio compatibility path may require subprocess workers for capture/playback"
+  ],
+  "canonical_workflows": {
+    "direct_message_tx": [
+      "HamHatApp.send_aprs_message",
+      "HamHatApp._send_aprs_message_impl",
+      "CommsManager.build_direct_chunks",
+      "build_aprs_message_payload",
+      "AprsEngine.send_payload or AprsEngine.send_reliable",
+      "AprsEngine._do_tx",
+      "AudioRouter.play_with_ptt_blocking"
+    ],
+    "group_message_tx": [
+      "CommsTab._send_message",
+      "HamHatApp.send_group_message",
+      "CommsManager.build_group_chunks",
+      "build_aprs_message_payload",
+      "AprsEngine.send_payload"
+    ],
+    "rx_monitor": [
+      "HamHatApp.start_rx_monitor",
+      "AprsEngine.start_rx_monitor",
+      "AprsEngine._rx_loop",
+      "decode_ax25_from_samples",
+      "HamHatApp._handle_packet",
+      "parse_aprs_position_info(info, destination=...) for Mic-E support"
+    ],
+    "profile_save_load": [
+      "HamHatApp._collect_profile_snapshot",
+      "ProfileManager.save/load",
+      "HamHatApp._apply_profile_to_tabs"
+    ]
+  },
+  "task_router": {
+    "radio_connection_or_config": [
+      "app/app.py",
+      "app/engine/radio_ctrl.py",
+      "app/engine/sa818_client.py"
+    ],
+    "aprs_encoding_decoding": [
+      "app/engine/aprs_modem.py",
+      "app/engine/aprs_engine.py"
+    ],
+    "chat_group_intro_threading": [
+      "app/engine/comms_mgr.py",
+      "app/ui/comms_tab.py",
+      "app/app.py"
+    ],
+    "audio_device_or_ptt": [
+      "app/engine/audio_router.py",
+      "app/engine/audio_tools.py",
+      "scripts/play_wav_worker.py",
+      "scripts/capture_wav_worker.py"
+    ],
+    "profile_persistence": [
+      "app/engine/models.py",
+      "app/engine/profile.py",
+      "app/ui/*.py apply_profile/collect_profile"
+    ],
+    "ui_behavior_or_controls": [
+      "app/ui/main_tab.py",
+      "app/ui/aprs_tab.py",
+      "app/ui/comms_tab.py",
+      "app/ui/setup_tab.py",
+      "app/ui/widgets.py"
+    ]
+  },
+  "hotspots": [
+    {
+      "area": "Payload validators",
+      "risk": "Invalid user input may raise ValueError unless handled by caller",
+      "files": [
+        "app/engine/aprs_modem.py",
+        "app/app.py",
+        "app/ui/comms_tab.py"
+      ]
+    },
+    {
+      "area": "Audio device identity",
+      "risk": "OS device names/indexes may drift across restarts",
+      "files": [
+        "app/engine/audio_tools.py",
+        "app/engine/audio_router.py",
+        "app/app.py"
+      ]
+    },
+    {
+      "area": "APRS DSP performance path",
+      "risk": "Decoder runs slower without SciPy (falls back to numpy convolution)",
+      "files": [
+        "app/engine/aprs_modem.py",
+        "requirements.txt"
+      ]
+    },
+    {
+      "area": "Shutdown behavior",
+      "risk": "RX/PTT cleanup sequencing can regress if close path changes",
+      "files": [
+        "app/app.py",
+        "app/engine/aprs_engine.py",
+        "app/engine/radio_ctrl.py"
+      ]
+    }
+  ],
+  "recommended_read_orders": {
+    "ultra_fast_5_files": [
+      "AGENT_CONTEXT.json",
+      "app/app.py",
+      "app/app_state.py",
+      "app/engine/models.py",
+      "app/engine/aprs_engine.py"
+    ],
+    "balanced_10_files": [
+      "main.py",
+      "app/app.py",
+      "app/app_state.py",
+      "app/engine/models.py",
+      "app/engine/aprs_engine.py",
+      "app/engine/aprs_modem.py",
+      "app/engine/radio_ctrl.py",
+      "app/engine/sa818_client.py",
+      "app/ui/comms_tab.py",
+      "app/ui/aprs_tab.py"
+    ],
+    "full_index_first": [
+      "AGENT_CODE_INDEX.json",
+      "AGENT_ONBOARDING_PACK.md",
+      "PROJECT_COMPONENT_MAP.md"
+    ]
+  },
+  "commands": {
+    "run_app": "python main.py",
+    "compile_check": "python -m compileall -q .",
+    "generate_onboarding_pack": "python scripts/generate_agent_onboarding_pack.py"
+  },
+  "dependencies": {
+    "required": [
+      "pyserial>=3.5",
+      "numpy>=1.24",
+      "sounddevice>=0.4.6",
+      "sv-ttk>=2.5.5"
+    ],
+    "optional": [
+      "scipy>=1.10",
+      "pycaw>=20240523"
+    ]
+  },
+  "onboarding_artifacts": {
+    "primary_map": "PROJECT_COMPONENT_MAP.md",
+    "machine_context": "AGENT_CONTEXT.json",
+    "generated_code_index": "AGENT_CODE_INDEX.json",
+    "generated_human_pack": "AGENT_ONBOARDING_PACK.md"
+  }
+}
