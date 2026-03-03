@@ -961,7 +961,11 @@ class HamHatApp(tk.Tk):
 
         # ACK received
         if "ack_id" in result:
-            self._aprs_tab.append_log(f"ACK received: id={result['ack_id']} from {pkt.source}")
+            ack_id = result["ack_id"]
+            self._aprs_tab.append_log(f"ACK received: id={ack_id} from {pkt.source}")
+            thread_key = self.comms.mark_delivered(ack_id)
+            if thread_key is not None:
+                self._comms_tab.on_delivered(thread_key)
             return
 
         # Intro

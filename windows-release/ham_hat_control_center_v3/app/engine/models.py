@@ -104,6 +104,7 @@ class ChatMessage:
     msg_id: str = ""
     thread_key: str = ""
     group: str = ""
+    delivered: bool = False   # True once an ACK is received for this message
 
 
 # ---------------------------------------------------------------------------

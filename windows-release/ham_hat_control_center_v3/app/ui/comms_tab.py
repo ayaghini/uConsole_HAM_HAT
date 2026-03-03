@@ -141,6 +141,7 @@ class CommsTab(ttk.Frame):
         self._msg_log.tag_configure("tx", foreground="#7ec8e3")
         self._msg_log.tag_configure("rx", foreground="#f5a623")
         self._msg_log.tag_configure("sys", foreground="#9cc4dd")
+        self._msg_log.tag_configure("delivered", foreground="#5dba6e")
 
         # ---- Compose area ----
         cf = ttk.LabelFrame(parent, text="Send Message", padding=6)
@@ -283,15 +284,15 @@ class CommsTab(ttk.Frame):
 
     def _render_message(self, msg: ChatMessage) -> None:
         """Append a single message to the log with colour tagging."""
-        ts = getattr(msg, "ts", "")
         if msg.direction == "TX":
-            prefix = f"[TX] {msg.src} → {msg.dst}: "
-            tag = "tx"
+            tick = " ✓" if msg.delivered else ""
+            prefix = f"[TX{tick}] {msg.src} → {msg.dst}: "
+            tag = "delivered" if msg.delivered else "tx"
         elif msg.direction == "RX":
             prefix = f"[RX] {msg.src}: "
             tag = "rx"
         else:
-            prefix = f"[SYS] "
+            prefix = "[SYS] "
             tag = "sys"
         line = prefix + msg.text + "\n"
         self._msg_log.configure(state="normal")
@@ -330,6 +331,14 @@ class CommsTab(ttk.Frame):
         active = self._app.comms.active_thread
         if msg.thread_key == active:
             self._render_message(msg)
+
+    def on_delivered(self, thread_key: str) -> None:
+        """Called when a TX message in thread_key receives its ACK.
+
+        Reloads the thread display so the delivered tick is shown.
+        """
+        if thread_key == self._app.comms.active_thread:
+            self._load_thread(thread_key)
 
     def refresh_contacts(self) -> None:
         """Rebuild contacts and group listboxes from CommsManager state."""

@@ -146,6 +146,21 @@ class CommsManager:
         if self._on_message_added:
             self._on_message_added(msg)
 
+    def mark_delivered(self, msg_id: str) -> Optional[str]:
+        """Mark the most-recent TX message with this msg_id as delivered.
+
+        Returns the thread_key of the updated message, or None if not found.
+        Called on the main thread when an ACK packet is received.
+        """
+        mid = msg_id.strip()
+        if not mid:
+            return None
+        for msg in reversed(self._messages):
+            if msg.msg_id.strip() == mid and msg.direction == "TX":
+                msg.delivered = True
+                return msg.thread_key
+        return None
+
     def messages_for_thread(self, thread_key: str) -> list[ChatMessage]:
         return [m for m in self._messages if m.thread_key == thread_key]
 
