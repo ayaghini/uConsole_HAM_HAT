@@ -102,6 +102,42 @@ mic = AudioUtilities.GetMicrophone()   # ← Windows default microphone endpoint
 
 ---
 
+## 4. Additional Findings (2026-03-02, round 2)
+
+### Bug D — CRITICAL: `GetAllDevices()` returns both render AND capture endpoints
+
+**Location:** `app/app.py` → `_apply_os_rx_level()`
+
+`pycaw.AudioUtilities.GetAllDevices()` enumerates **all** active Windows audio endpoints regardless of data flow direction. When the SA818 USB audio codec names both its output endpoint and its input endpoint identically (Windows assigns "USB Audio Device" to both the speaker side and the microphone side of many USB codecs), the substring name search matches whichever endpoint appears first in the enumeration. If the render (output) endpoint appears first, the code sets the **speaker volume** to 35% while the actual microphone input level is never touched.
+
+This explains the PC-to-PC discrepancy: on a PC where Windows happened to name the endpoints differently (e.g. "Speakers (USB Audio Device)" vs "Microphone (USB Audio Device)"), the match is correct and the mic level is set. On a PC where both share the name "USB Audio Device", the match is wrong and the mic level is left at whatever Windows auto-configured.
+
+**Fix:** Use the Windows MMDevice endpoint ID to distinguish data flow direction. Endpoint IDs follow the format `{0.0.X.XXXXXXXX}.{GUID}` where the third octet is `0` for render and `1` for capture. Skip confirmed render endpoints (`".0.0."` in the ID) when looking for the input device.
+
+---
+
+### Bug E — IMPORTANT: SA818 playback device Windows volume never controlled
+
+**Location:** `app/app.py` — no TX volume control existed
+
+The SA818's FM deviation is determined by the audio amplitude going into its MIC input, which in turn depends on:
+1. The AFSK WAV amplitude (`aprs_tx_gain`, default 0.34 = −9.4 dBFS)
+2. The Windows playback device volume for the SA818 USB codec's output endpoint
+
+Windows auto-configures the playback volume when a USB device is first plugged in; different machines end up with different values (commonly 50–100%). A 50% vs 100% difference in Windows playback volume halves the FM deviation, which is the difference between a clean APRS signal and a barely-decodable one.
+
+**Fix:** Add `_apply_os_tx_level(100)` called whenever an audio pair is selected or the RX monitor is started. This uses the same endpoint ID filtering as the RX fix (skips capture endpoints) and sets the SA818's output endpoint to 100%.
+
+---
+
+### Bug F — MINOR: Audio level control results logged to debug only
+
+`_log.debug("OS mic level error: ...")` — these errors are invisible unless debug logging is enabled. Success just updates the status bar (immediately overwritten by the next status message).
+
+**Fix:** Route success and error messages to `_AprsLogEvt` (visible in the APRS log panel, persistent).
+
+---
+
 ## 4. Implemented Fixes
 
 ### Fix 1 — `aprs_engine.py`: move energy gate to pre-trim signal

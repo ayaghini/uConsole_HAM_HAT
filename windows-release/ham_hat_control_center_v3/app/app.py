@@ -314,6 +314,10 @@ class HamHatApp(tk.Tk):
         elif isinstance(evt, _AudioPairEvt):
             self._main_tab.on_audio_pair(evt.out_idx, evt.out_name, evt.in_idx, evt.in_name)
             self._set_status(f"Audio: {evt.out_name} / {evt.in_name}")
+            # Set OS levels immediately after device selection so both PCs have
+            # consistent TX FM deviation (output → 100%) and RX capture level.
+            self._apply_os_tx_level(100)
+            self._apply_os_rx_level(self._current_os_rx_level)
 
         elif isinstance(evt, _InputLevelEvt):
             self._aprs_tab.set_input_level(evt.level)
@@ -811,6 +815,9 @@ class HamHatApp(tk.Tk):
             hw_mode=hw,
         )
         self._set_status("RX monitor started")
+        # Ensure SA818 TX path is at full OS volume for maximum FM deviation,
+        # then set the capture level to the profile's configured value.
+        self._apply_os_tx_level(100)
         self._apply_os_rx_level(p.aprs_rx_os_level)
 
     def stop_rx_monitor(self) -> None:
@@ -1248,10 +1255,14 @@ class HamHatApp(tk.Tk):
 
                 scalar = max(0.0, min(1.0, level / 100.0))
                 device = None
+                matched_name = ""
 
-                # Try to match the selected input device by name so we set the
-                # correct endpoint rather than the Windows default microphone
-                # (which may be a headset/webcam, not the SA818 USB codec).
+                # Find the selected input device by name among Windows audio endpoints.
+                # GetAllDevices() returns BOTH render (output) and capture (input) endpoints.
+                # Windows MMDevice IDs encode data flow: "{0.0.0.…}.{GUID}" = render,
+                # "{0.0.1.…}.{GUID}" = capture.  We skip confirmed render endpoints so that
+                # when the SA818 USB codec names both endpoints identically (e.g. "USB Audio
+                # Device"), we do not accidentally set the speaker volume instead of the mic.
                 if selected_name:
                     sel_lower = selected_name.lower()
                     try:
@@ -1260,23 +1271,102 @@ class HamHatApp(tk.Tk):
                             _w.simplefilter("ignore")   # suppress pycaw COMError UserWarnings
                             all_devs = AudioUtilities.GetAllDevices()
                         for d in all_devs:
-                            if d.FriendlyName and sel_lower in d.FriendlyName.lower():
-                                device = d
-                                break
-                    except Exception:
-                        pass
+                            if not (d.FriendlyName and sel_lower in d.FriendlyName.lower()):
+                                continue
+                            # Skip confirmed render endpoints (ID contains ".0.0.")
+                            dev_id = ""
+                            try:
+                                dev_id = d.id or ""
+                            except Exception:
+                                pass
+                            if dev_id and ".0.0." in dev_id:
+                                continue   # render endpoint — skip
+                            device = d
+                            matched_name = d.FriendlyName
+                            break
+                    except Exception as exc:
+                        _log.debug("OS rx level device scan error: %s", exc)
 
                 if device is None:
                     device = AudioUtilities.GetMicrophone()
+                    matched_name = "default microphone"
 
                 interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                volume = interface.QueryInterface(IAudioEndpointVolume)
-                volume.SetMasterVolumeLevelScalar(scalar, None)
-                self._evq.put_nowait(_StatusEvt(f"OS mic level set to {level}%"))
+                vol = interface.QueryInterface(IAudioEndpointVolume)
+                vol.SetMasterVolumeLevelScalar(scalar, None)
+                msg = f"OS mic level → {level}% on \"{matched_name}\""
+                self._evq.put_nowait(_StatusEvt(msg))
+                self._evq.put_nowait(_AprsLogEvt(msg))
             except ImportError:
                 pass  # pycaw not installed — graceful fallback
             except Exception as exc:
-                _log.debug("OS mic level error: %s", exc)
+                err = f"OS mic level error: {exc}"
+                _log.debug(err)
+                self._evq.put_nowait(_AprsLogEvt(err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_os_tx_level(self, level: int) -> None:
+        """Set the SA818 USB playback device to `level` % in Windows.
+
+        The SA818's Windows playback volume directly scales the audio level fed into
+        the SA818's MIC input, which determines FM deviation.  Different PCs may have
+        different auto-configured playback levels; setting it explicitly ensures
+        consistent FM deviation across machines.
+        """
+        import platform
+        if platform.system().lower() != "windows":
+            return
+
+        selected_name: str = getattr(self, "_output_dev_name", "")
+
+        def worker():
+            try:
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+                from comtypes import CLSCTX_ALL
+
+                scalar = max(0.0, min(1.0, level / 100.0))
+                device = None
+                matched_name = ""
+
+                # Find the selected output device among Windows endpoints.
+                # Skip confirmed capture endpoints (ID contains ".0.1.").
+                if selected_name:
+                    sel_lower = selected_name.lower()
+                    try:
+                        import warnings as _w
+                        with _w.catch_warnings():
+                            _w.simplefilter("ignore")
+                            all_devs = AudioUtilities.GetAllDevices()
+                        for d in all_devs:
+                            if not (d.FriendlyName and sel_lower in d.FriendlyName.lower()):
+                                continue
+                            dev_id = ""
+                            try:
+                                dev_id = d.id or ""
+                            except Exception:
+                                pass
+                            if dev_id and ".0.1." in dev_id:
+                                continue   # capture endpoint — skip
+                            device = d
+                            matched_name = d.FriendlyName
+                            break
+                    except Exception as exc:
+                        _log.debug("OS tx level device scan error: %s", exc)
+
+                if device is None:
+                    device = AudioUtilities.GetSpeaker()
+                    matched_name = "default speaker"
+
+                interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                vol = interface.QueryInterface(IAudioEndpointVolume)
+                vol.SetMasterVolumeLevelScalar(scalar, None)
+                msg = f"OS speaker level → {level}% on \"{matched_name}\""
+                self._evq.put_nowait(_AprsLogEvt(msg))
+            except ImportError:
+                pass
+            except Exception as exc:
+                _log.debug("OS tx level error: %s", exc)
 
         threading.Thread(target=worker, daemon=True).start()
 
