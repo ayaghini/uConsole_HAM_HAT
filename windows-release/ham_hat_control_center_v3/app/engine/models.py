@@ -196,3 +196,7 @@ class AppProfile:
     chat_contacts: list[str] = field(default_factory=list)
     chat_groups: dict[str, list[str]] = field(default_factory=dict)
     chat_intro_note: str = "uConsole HAM HAT online"
+
+    # Hardware mode
+    hardware_mode: str = "SA818"  # "SA818" or "DigiRig"
+    digirig_port: str = ""        # serial port for DigiRig PTT (e.g. "COM5")

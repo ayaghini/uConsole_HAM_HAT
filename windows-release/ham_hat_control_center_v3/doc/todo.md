@@ -1,7 +1,7 @@
 # HAM HAT Control Center v2 — QA Findings
 
 **Date reviewed:** 2026-02-26
-**Version:** 3.0 (VERSION file) / v2 app directory
+**Version:** 4.0 (VERSION file) / v3 app directory
 **Reviewer:** Claude Code static analysis
 
 ---

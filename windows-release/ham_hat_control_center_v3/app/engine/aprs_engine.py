@@ -59,6 +59,8 @@ class _TxSnapshot:
         "source", "destination", "path", "gain", "preamble_flags",
         "trailing_flags", "repeats", "out_dev", "ptt", "radio",
         "volume", "reinit", "port",
+        "hw_mode",          # "SA818" or "DigiRig"
+        "ptt_serial_port",  # DigiRig PTT serial port (blank for SA818)
     )
 
     def __init__(
@@ -76,6 +78,8 @@ class _TxSnapshot:
         volume: int,
         reinit: bool,
         port: str,
+        hw_mode: str = "SA818",
+        ptt_serial_port: str = "",
     ) -> None:
         self.source = source
         self.destination = destination
@@ -90,6 +94,8 @@ class _TxSnapshot:
         self.volume = volume
         self.reinit = reinit
         self.port = port
+        self.hw_mode = hw_mode
+        self.ptt_serial_port = ptt_serial_port
 
 
 class AprsEngine:
@@ -188,6 +194,11 @@ class AprsEngine:
 
     def _do_tx(self, payload: str, snap: _TxSnapshot, attempt: int = 1) -> None:
         """Prepare radio, play APRS WAV, restore radio config."""
+        if snap.hw_mode == "DigiRig":
+            self._do_tx_digirig(payload, snap, attempt)
+            return
+
+        # --- SA818 path ---
         if not self._radio.connected:
             if snap.reinit and snap.port:
                 self._radio.connect(snap.port)
@@ -248,6 +259,63 @@ class AprsEngine:
             except Exception as exc:
                 self._log(f"Radio restore warning after TX: {exc}")
             # Remove temporary TX WAV to prevent unbounded audio_out/ growth
+            if wav_path is not None:
+                try:
+                    wav_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+    def _do_tx_digirig(self, payload: str, snap: _TxSnapshot, attempt: int = 1) -> None:
+        """DigiRig TX path: no SA818 radio control; PTT via transient serial RTS."""
+        import serial as _serial
+
+        dr_ser = None
+        if snap.ptt.enabled and snap.ptt_serial_port:
+            try:
+                dr_ser = _serial.Serial(
+                    snap.ptt_serial_port, 9600,
+                    dsrdtr=False, rtscts=False, xonxoff=False, timeout=0.1,
+                )
+                dr_ser.rts = False  # ensure released at open
+                dr_ser.dtr = False
+            except Exception as exc:
+                self._log(f"DigiRig: PTT port open failed ({snap.ptt_serial_port}): {exc}")
+                dr_ser = None
+
+        def ptt_cb(state: bool) -> None:
+            if dr_ser and dr_ser.is_open:
+                try:
+                    drive = state if snap.ptt.active_high else (not state)
+                    dr_ser.rts = drive
+                except Exception as exc:
+                    self._log(f"DigiRig PTT error: {exc}")
+
+        wav_path = None
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            wav_path = self._audio_dir / f"aprs_tx_{attempt}_{ts}.wav"
+            self._audio_dir.mkdir(parents=True, exist_ok=True)
+
+            write_aprs_wav(
+                wav_path,
+                source=snap.source,
+                destination=snap.destination,
+                path_via=snap.path,
+                message=payload,
+                tx_gain=snap.gain,
+                preamble_flags=snap.preamble_flags,
+                trailing_flags=snap.trailing_flags,
+            )
+
+            with self._audio_lock:
+                self._audio.play_with_ptt_blocking(wav_path, snap.out_dev, snap.ptt, ptt_cb)
+        finally:
+            if dr_ser is not None:
+                try:
+                    dr_ser.rts = False
+                    dr_ser.close()
+                except Exception:
+                    pass
             if wav_path is not None:
                 try:
                     wav_path.unlink(missing_ok=True)
@@ -365,6 +433,7 @@ class AprsEngine:
         chunk_s: float,
         trim_db: float,
         aprs_radio: RadioConfig,
+        hw_mode: str = "SA818",
     ) -> None:
         if self._rx_running:
             self._aprs_log("RX monitor already running")
@@ -372,12 +441,26 @@ class AprsEngine:
         self._rx_running = True
         self._rx_overlap = None
         self._rx_chunk_floor_logged = False
-        self._radio.push_config(aprs_radio)
-        try:
-            self._radio.set_filters(True, True, True)
-        except Exception:
-            pass
-        self._aprs_log("RX monitor: SA818 squelch=0 flat filters applied")
+        self._rx_hw_mode = hw_mode
+
+        if hw_mode != "DigiRig":
+            self._radio.push_config(aprs_radio)
+            try:
+                self._radio.set_filters(True, True, True)
+            except Exception:
+                pass
+            # Ensure SA818 audio output is at maximum so captured audio from
+            # the USB codec is strong enough to clear the energy gate.
+            # AT+DMOSETVOLUME is NOT saved/restored by push/pop_config, so it
+            # must be set explicitly here (pop_config only restores DMOSETGROUP).
+            try:
+                self._radio.set_volume(8)
+            except Exception:
+                pass
+            self._aprs_log("RX monitor: SA818 squelch=0 flat filters applied, volume=8")
+        else:
+            self._aprs_log("RX monitor: DigiRig mode — listening on selected audio device")
+
         self._rx_thread = threading.Thread(
             target=self._rx_loop,
             args=(in_dev, chunk_s, trim_db),
@@ -394,13 +477,14 @@ class AprsEngine:
         if self._rx_thread is not None:
             self._rx_thread.join(timeout=12.0)   # wait for current chunk to finish
             self._rx_thread = None
-        # Restore user radio config
-        try:
-            restored = self._radio.pop_config()
-            if restored:
-                self._aprs_log("RX monitor stopped: radio config restored")
-        except Exception as exc:
-            self._aprs_log(f"RX monitor restore warning: {exc}")
+        # Restore user radio config (SA818 only)
+        if getattr(self, "_rx_hw_mode", "SA818") != "DigiRig":
+            try:
+                restored = self._radio.pop_config()
+                if restored:
+                    self._aprs_log("RX monitor stopped: radio config restored")
+            except Exception as exc:
+                self._aprs_log(f"RX monitor restore warning: {exc}")
 
     def _rx_loop(self, in_dev: Optional[int], chunk_s: float, trim_db: float) -> None:
         import platform
@@ -428,6 +512,14 @@ class AprsEngine:
                 if self._on_rx_clip:
                     self._on_rx_clip(clip_pct)
 
+                # Energy gate: skip DSP on silent chunks.
+                # Gate is checked on the RAW (pre-trim) signal so that the
+                # −12 dB default trim does not cause weak-but-valid SA818
+                # packets to be silently dropped before reaching the decoder.
+                rms_raw = float(np.sqrt(np.mean(mono * mono)))
+                if rms_raw < 0.001:
+                    continue
+
                 mono_trimmed = _apply_trim_db(mono, trim_db)
                 rms = float(np.sqrt(np.mean(mono_trimmed * mono_trimmed)))
                 in_level = min(1.0, rms * 8.0)
@@ -435,10 +527,6 @@ class AprsEngine:
                     self._on_input_level(in_level)
                 if self._on_waterfall:
                     self._on_waterfall(mono_trimmed, rate)
-
-                # Energy gate: skip DSP on silent chunks (RMS < -60 dBFS)
-                if rms < 0.001:
-                    continue
 
                 # Decode with overlap from previous chunk
                 overlap = self._rx_overlap

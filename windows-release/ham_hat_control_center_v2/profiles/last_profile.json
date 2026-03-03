@@ -1,7 +1,7 @@
 {
   "frequency": 144.39,
   "offset": 0.0,
-  "squelch": 0,
+  "squelch": 1,
   "bandwidth": "Wide",
   "ctcss_tx": "",
   "ctcss_rx": "",
@@ -11,7 +11,7 @@
   "disable_highpass": true,
   "disable_lowpass": true,
   "volume": 8,
-  "aprs_source": "VA7AYG-1",
+  "aprs_source": "VA7AYG-2",
   "aprs_dest": "APRS",
   "aprs_path": "WIDE1-1",
   "aprs_tx_gain": 0.34,
@@ -20,7 +20,7 @@
   "aprs_tx_reinit": true,
   "aprs_symbol_table": "/",
   "aprs_symbol": ">",
-  "aprs_msg_to": "VA7AYG-7",
+  "aprs_msg_to": "VA7AYG-01",
   "aprs_msg_text": "hello from uC",
   "aprs_reliable": false,
   "aprs_ack_timeout": 8.0,
@@ -32,7 +32,7 @@
   "aprs_rx_duration": 10.0,
   "aprs_rx_chunk": 8.0,
   "aprs_rx_trim_db": -4.326923076923077,
-  "aprs_rx_os_level": 65,
+  "aprs_rx_os_level": 96,
   "aprs_rx_auto": true,
   "output_device_name": "Speakers (2- USB Audio Device)",
   "input_device_name": "Microphone (2- USB Audio Device)",
@@ -50,5 +50,5 @@
     "VA7AYG-7"
   ],
   "chat_groups": {},
-  "chat_intro_note": "uConsole HAM HAT online"
+  "chat_intro_note": "uConsole HAM HAT online from 2"
 }

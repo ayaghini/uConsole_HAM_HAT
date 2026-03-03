@@ -91,16 +91,25 @@ class AudioRouter:
             if out_match is not None and in_match is not None:
                 return out_match, in_match
 
-        # 2) Unique USB pair
-        usb_outs = [(i, n) for i, n in outs if "usb audio device" in n.lower()]
-        usb_ins = [(i, n) for i, n in ins if "usb audio device" in n.lower()]
+        # 2) Unique USB pair — matches SA818 ("usb audio device") and DigiRig ("usb pnp sound device")
+        _USB_KW = ("usb audio device", "usb pnp sound device", "digirig")
+
+        def _is_usb_audio(name: str) -> bool:
+            nl = name.lower()
+            return any(k in nl for k in _USB_KW)
+
+        usb_outs = [(i, n) for i, n in outs if _is_usb_audio(n)]
+        usb_ins = [(i, n) for i, n in ins if _is_usb_audio(n)]
         if len(usb_outs) == 1 and len(usb_ins) == 1:
             return usb_outs[0][0], usb_ins[0][0]
 
         # 3) Shared USB token
         import re
         def usb_token(name: str) -> str:
-            m = re.search(r"\(([^)]*usb audio device[^)]*)\)", name, flags=re.IGNORECASE)
+            m = re.search(
+                r"\(([^)]*(?:usb audio device|usb pnp sound device|digirig)[^)]*)\)",
+                name, flags=re.IGNORECASE,
+            )
             return m.group(1).strip().lower() if m else ""
 
         out_tok: dict[str, int] = {}

@@ -172,6 +172,8 @@ class HamHatApp(tk.Tk):
         self.aprs_rx_level_var = self.state.aprs_rx_level_var
         self.aprs_rx_os_level_var = self.state.aprs_rx_os_level_var
         self.aprs_rx_auto_var = self.state.aprs_rx_auto_var
+        self.hardware_mode_var = self.state.hardware_mode_var
+        self.digirig_port_var  = self.state.digirig_port_var
 
         # --- Build UI ---
         self._build_ui()
@@ -394,11 +396,23 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     # -----------------------------------------------------------------------
+    # Hardware mode helper
+    # -----------------------------------------------------------------------
+
+    def _hw_mode(self) -> str:
+        """Return current hardware mode: 'SA818' or 'DigiRig'."""
+        return self.hardware_mode_var.get()
+
+    # -----------------------------------------------------------------------
     # Connection actions
     # -----------------------------------------------------------------------
 
     def connect(self, port: str = "") -> None:
         """Connect to SA818 on given port (called from main thread)."""
+        if self._hw_mode() == "DigiRig":
+            self._set_status("DigiRig mode: no SA818 connection needed. Set PTT port and select audio device.")
+            return
+
         port = (port or self.port_var.get()).strip()
         if not port:
             self._set_status("Select a COM port first")
@@ -421,6 +435,10 @@ class HamHatApp(tk.Tk):
         self._apply_radio_config(p)
 
     def disconnect(self) -> None:
+        if self._hw_mode() == "DigiRig":
+            self._set_status("DigiRig mode: nothing to disconnect.")
+            return
+
         def worker():
             try:
                 self.aprs.stop_rx_monitor()
@@ -439,7 +457,74 @@ class HamHatApp(tk.Tk):
             return []
 
     def auto_identify_and_connect(self) -> None:
-        """Probe all COM ports in background thread; connect to first SA818 found."""
+        """Probe COM ports. SA818 mode: connect to first SA818. DigiRig mode: find non-SA818 port."""
+        if self._hw_mode() == "DigiRig":
+            def digirig_worker():
+                """
+                Identify the DigiRig PTT port even when both SA818 and DigiRig are connected.
+
+                Strategy:
+                  1. Collect all serial ports.
+                  2. Probe each with AT+DMOCONNECT (short timeout).
+                     - Responds with +DMOCONNECT:0 → it's the SA818 HAT → skip.
+                     - No response / wrong reply → SA818-negative candidate.
+                  3. Among SA818-negative candidates prefer ports whose USB description
+                     contains "CP210x" / "Silicon Labs" (DigiRig uses CP2102).
+                  4. Auto-select if exactly one candidate, otherwise log all choices.
+                """
+                try:
+                    import serial.tools.list_ports
+                    all_ports = list(serial.tools.list_ports.comports())
+                except Exception:
+                    all_ports = []
+
+                if not all_ports:
+                    self._evq.put_nowait(_StatusEvt("DigiRig auto-identify: no serial ports found."))
+                    return
+
+                from .engine.sa818_client import SA818Client as _SA818Client
+                sa818_ports: list[str] = []
+                non_sa818_ports: list[tuple[str, str]] = []   # (device, description)
+
+                for port_info in all_ports:
+                    device = port_info.device
+                    desc = (port_info.description or "").strip()
+                    ok, _ = _SA818Client.probe(device, timeout=0.6)
+                    if ok:
+                        sa818_ports.append(device)
+                    else:
+                        non_sa818_ports.append((device, desc))
+
+                if sa818_ports:
+                    self._evq.put_nowait(_LogEvt(f"DigiRig auto-identify: SA818 found on {', '.join(sa818_ports)} (skipped)"))
+
+                if not non_sa818_ports:
+                    self._evq.put_nowait(_StatusEvt("DigiRig auto-identify: no non-SA818 port found. Is DigiRig connected?"))
+                    return
+
+                # Prefer CP210x / Silicon Labs ports (DigiRig uses CP2102)
+                cp210x_candidates = [
+                    (dev, desc) for dev, desc in non_sa818_ports
+                    if "cp210" in desc.lower() or "silicon labs" in desc.lower()
+                ]
+                candidates = cp210x_candidates if cp210x_candidates else non_sa818_ports
+
+                if len(candidates) == 1:
+                    suggested = candidates[0][0]
+                    desc = candidates[0][1]
+                    self.after_idle(lambda p=suggested: self.digirig_port_var.set(p))
+                    self._evq.put_nowait(_StatusEvt(
+                        f"DigiRig auto-identify: set PTT port to {suggested} ({desc})"
+                    ))
+                else:
+                    names = ", ".join(f"{dev} ({desc})" for dev, desc in candidates)
+                    self._evq.put_nowait(_StatusEvt(
+                        f"DigiRig auto-identify: multiple candidates — {names}. Select manually."
+                    ))
+
+            threading.Thread(target=digirig_worker, daemon=True).start()
+            return
+
         def worker():
             ports = self.scan_ports()
             if not ports:
@@ -461,6 +546,9 @@ class HamHatApp(tk.Tk):
 
     def apply_radio(self) -> None:
         """Read radio params from main tab and apply to SA818."""
+        if self._hw_mode() == "DigiRig":
+            self._set_status("Radio control not available in DigiRig mode — program radio manually.")
+            return
         if not self.radio.connected:
             self._set_status("Radio not connected")
             return
@@ -498,6 +586,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def apply_filters(self, emphasis: bool, highpass: bool, lowpass: bool) -> None:
+        if self._hw_mode() == "DigiRig":
+            self._set_status("Filter control not available in DigiRig mode."); return
         if not self.radio.connected:
             self._set_status("Not connected"); return
 
@@ -511,6 +601,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def set_volume(self, level: int) -> None:
+        if self._hw_mode() == "DigiRig":
+            self._set_status("Volume control not available in DigiRig mode."); return
         if not self.radio.connected:
             self._set_status("Not connected"); return
 
@@ -524,6 +616,8 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def apply_tail(self, open_tail: bool) -> None:
+        if self._hw_mode() == "DigiRig":
+            self._set_status("Squelch tail not available in DigiRig mode."); return
         if not self.radio.connected:
             self._set_status("Not connected"); return
 
@@ -700,7 +794,8 @@ class HamHatApp(tk.Tk):
     # -----------------------------------------------------------------------
 
     def start_rx_monitor(self) -> None:
-        if not self.radio.connected:
+        hw = self._hw_mode()
+        if hw != "DigiRig" and not self.radio.connected:
             self._set_status("Not connected"); return
         p = self._get_current_profile()
         bw = 1 if p.bandwidth.lower().startswith("w") else 0
@@ -713,6 +808,7 @@ class HamHatApp(tk.Tk):
             chunk_s=p.aprs_rx_chunk,
             trim_db=p.aprs_rx_trim_db,
             aprs_radio=aprs_radio,
+            hw_mode=hw,
         )
         self._set_status("RX monitor started")
         self._apply_os_rx_level(p.aprs_rx_os_level)
@@ -724,7 +820,7 @@ class HamHatApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def one_shot_rx(self) -> None:
-        if not self.radio.connected:
+        if self._hw_mode() != "DigiRig" and not self.radio.connected:
             self._set_status("Not connected"); return
         p = self._get_current_profile()
         in_dev = getattr(self, "_input_dev_idx", None)
@@ -994,6 +1090,10 @@ class HamHatApp(tk.Tk):
         # Restore comms contacts/groups
         self.comms.from_dict({"contacts": p.chat_contacts, "groups": p.chat_groups})
         self._comms_tab.refresh_contacts()
+        # Restore hardware mode vars
+        hw = p.hardware_mode if p.hardware_mode in ("SA818", "DigiRig") else "SA818"
+        self.hardware_mode_var.set(hw)
+        self.digirig_port_var.set(p.digirig_port)
         # Cache device indices from names (best-effort)
         self._restore_audio_from_profile(p)
 
@@ -1021,6 +1121,9 @@ class HamHatApp(tk.Tk):
         # Store audio device names for future restore
         p.output_device_name = getattr(self, "_output_dev_name", "")
         p.input_device_name  = getattr(self, "_input_dev_name", "")
+        # Hardware mode
+        p.hardware_mode = self.hardware_mode_var.get()
+        p.digirig_port  = self.digirig_port_var.get().strip()
         return p
 
     def _get_current_profile(self) -> AppProfile:
@@ -1043,6 +1146,7 @@ class HamHatApp(tk.Tk):
 
     def _make_tx_snapshot(self) -> Optional[_TxSnapshot]:
         p = self._get_current_profile()
+        hw = self._hw_mode()
         out_dev = getattr(self, "_output_dev_idx", None)
         if out_dev is None:
             out_dev = 0   # system default
@@ -1064,6 +1168,29 @@ class HamHatApp(tk.Tk):
             pre_ms=p.ptt_pre_ms,
             post_ms=p.ptt_post_ms,
         )
+
+        if hw == "DigiRig":
+            # DigiRig: no SA818 port needed; PTT via separate serial port
+            ptt_serial_port = self.digirig_port_var.get().strip()
+            return _TxSnapshot(
+                source=p.aprs_source,
+                destination=p.aprs_dest,
+                path=p.aprs_path,
+                gain=p.aprs_tx_gain,
+                preamble_flags=p.aprs_preamble_flags,
+                trailing_flags=16,
+                repeats=p.aprs_tx_repeats,
+                out_dev=int(out_dev),
+                ptt=ptt,
+                radio=radio,
+                volume=p.volume,
+                reinit=False,
+                port="",
+                hw_mode="DigiRig",
+                ptt_serial_port=ptt_serial_port,
+            )
+
+        # --- SA818 path ---
         # Derive port from RadioController client
         port = ""
         try:
@@ -1086,6 +1213,8 @@ class HamHatApp(tk.Tk):
             volume=p.volume,
             reinit=p.aprs_tx_reinit,
             port=port,
+            hw_mode="SA818",
+            ptt_serial_port="",
         )
 
     def _make_ptt_config(self) -> PttConfig:
@@ -1110,14 +1239,36 @@ class HamHatApp(tk.Tk):
         if platform.system().lower() != "windows":
             return
 
+        selected_name: str = getattr(self, "_input_dev_name", "")
+
         def worker():
             try:
                 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
                 from comtypes import CLSCTX_ALL
-                device = AudioUtilities.GetMicrophone()
+
+                scalar = max(0.0, min(1.0, level / 100.0))
+                device = None
+
+                # Try to match the selected input device by name so we set the
+                # correct endpoint rather than the Windows default microphone
+                # (which may be a headset/webcam, not the SA818 USB codec).
+                if selected_name:
+                    sel_lower = selected_name.lower()
+                    try:
+                        all_devs = AudioUtilities.GetAllDevices()
+                        for d in all_devs:
+                            if d.FriendlyName and sel_lower in d.FriendlyName.lower():
+                                device = d
+                                break
+                    except Exception:
+                        pass
+
+                if device is None:
+                    device = AudioUtilities.GetMicrophone()
+
                 interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 volume = interface.QueryInterface(IAudioEndpointVolume)
-                volume.SetMasterVolumeLevelScalar(max(0.0, min(1.0, level / 100.0)), None)
+                volume.SetMasterVolumeLevelScalar(scalar, None)
                 self._evq.put_nowait(_StatusEvt(f"OS mic level set to {level}%"))
             except ImportError:
                 pass  # pycaw not installed — graceful fallback
@@ -1199,6 +1350,8 @@ class HamHatApp(tk.Tk):
         self.auto_identify_and_connect()
 
     def read_version(self) -> None:
+        if self._hw_mode() == "DigiRig":
+            self._set_status("Version read not available in DigiRig mode."); return
         if not self.radio.connected:
             self._set_status("Not connected"); return
 

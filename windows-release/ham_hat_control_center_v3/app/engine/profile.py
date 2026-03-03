@@ -100,6 +100,8 @@ def _profile_to_dict(p: AppProfile) -> dict:
         "chat_contacts": p.chat_contacts,
         "chat_groups": p.chat_groups,
         "chat_intro_note": p.chat_intro_note,
+        "hardware_mode": p.hardware_mode,
+        "digirig_port": p.digirig_port,
     }
 
 
@@ -188,5 +190,9 @@ def _dict_to_profile(d: dict) -> AppProfile:
             if isinstance(k, str) and k.strip()
         }
     p.chat_intro_note = _str("chat_intro_note", AppProfile.chat_intro_note)
+
+    hw = _str("hardware_mode", AppProfile.hardware_mode)
+    p.hardware_mode = hw if hw in ("SA818", "DigiRig") else "SA818"
+    p.digirig_port = _str("digirig_port", AppProfile.digirig_port)
 
     return p
