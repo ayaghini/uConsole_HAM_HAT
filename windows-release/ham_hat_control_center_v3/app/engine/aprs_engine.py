@@ -15,6 +15,7 @@ v2 improvements over v1:
 
 from __future__ import annotations
 
+import queue
 import threading
 import wave
 from collections import OrderedDict
@@ -113,7 +114,11 @@ class AprsEngine:
         # RX monitor state
         self._rx_running = False
         self._rx_thread: Optional[threading.Thread] = None
-        self._rx_overlap: Optional[np.ndarray] = None
+        self._decode_thread: Optional[threading.Thread] = None
+        # Bounded queue between capture thread and decode thread (async decode).
+        # maxsize=4 → at most ~32 s of buffered audio; keeps memory bounded.
+        self._decode_queue: "queue.Queue[Optional[tuple]]" = queue.Queue(maxsize=4)
+        self._rx_overlap: Optional[np.ndarray] = None  # kept for compat; overlap now local to _decode_loop
         self._rx_chunk_floor_logged = False
 
         # ACK tracking (reliable messaging)
@@ -443,6 +448,13 @@ class AprsEngine:
         self._rx_chunk_floor_logged = False
         self._rx_hw_mode = hw_mode
 
+        # Drain any stale items left from a previous session
+        while not self._decode_queue.empty():
+            try:
+                self._decode_queue.get_nowait()
+            except Exception:
+                break
+
         if hw_mode != "DigiRig":
             self._radio.push_config(aprs_radio)
             try:
@@ -461,13 +473,23 @@ class AprsEngine:
         else:
             self._aprs_log("RX monitor: DigiRig mode — listening on selected audio device")
 
+        # Start decode thread FIRST so it is ready before capture begins.
+        # Decoding runs asynchronously, eliminating the dead time between captures
+        # that caused missed packets when the decode ran in the capture thread.
+        self._decode_thread = threading.Thread(
+            target=self._decode_loop,
+            args=(chunk_s,),
+            daemon=True,
+        )
+        self._decode_thread.start()
+
         self._rx_thread = threading.Thread(
             target=self._rx_loop,
             args=(in_dev, chunk_s, trim_db),
             daemon=True,
         )
         self._rx_thread.start()
-        self._aprs_log("RX monitor started")
+        self._aprs_log("RX monitor started (async decode)")
 
     def stop_rx_monitor(self) -> None:
         if not self._rx_running:
@@ -477,6 +499,17 @@ class AprsEngine:
         if self._rx_thread is not None:
             self._rx_thread.join(timeout=12.0)   # wait for current chunk to finish
             self._rx_thread = None
+        # Wait for decode thread to drain its queue and exit.
+        # The decode loop exits when the queue is empty AND _rx_running is False.
+        if self._decode_thread is not None:
+            self._decode_thread.join(timeout=30.0)
+            self._decode_thread = None
+        # Discard any remaining items in the queue
+        while not self._decode_queue.empty():
+            try:
+                self._decode_queue.get_nowait()
+            except Exception:
+                break
         # Restore user radio config (SA818 only)
         if getattr(self, "_rx_hw_mode", "SA818") != "DigiRig":
             try:
@@ -487,6 +520,9 @@ class AprsEngine:
                 self._aprs_log(f"RX monitor restore warning: {exc}")
 
     def _rx_loop(self, in_dev: Optional[int], chunk_s: float, trim_db: float) -> None:
+        """Capture-only loop. Immediately submits each chunk to the decode queue
+        so there is zero dead time between consecutive captures.
+        All heavy DSP (AFSK discriminator + HDLC search) runs in _decode_loop."""
         import platform
         on_windows = platform.system().lower() == "windows"
 
@@ -507,59 +543,90 @@ class AprsEngine:
                 finally:
                     self._audio_lock.release()
 
-                # Signal levels / waterfall
+                # Clip indicator (fast path — for UI only)
                 clip_pct = float(np.mean(np.abs(mono) >= 0.98) * 100.0)
                 if self._on_rx_clip:
                     self._on_rx_clip(clip_pct)
 
-                # Energy gate: skip DSP on silent chunks.
-                # Gate is checked on the RAW (pre-trim) signal so that the
-                # −12 dB default trim does not cause weak-but-valid SA818
-                # packets to be silently dropped before reaching the decoder.
+                # Energy gate on RAW (pre-trim) signal — avoids discarding
+                # weak-but-valid SA818 packets that trim_db would push below
+                # threshold when the gate was applied to the trimmed signal.
                 rms_raw = float(np.sqrt(np.mean(mono * mono)))
                 if rms_raw < 0.001:
                     continue
 
+                # Level / waterfall (fast, for UI)
                 mono_trimmed = _apply_trim_db(mono, trim_db)
                 rms = float(np.sqrt(np.mean(mono_trimmed * mono_trimmed)))
-                in_level = min(1.0, rms * 8.0)
                 if self._on_input_level:
-                    self._on_input_level(in_level)
+                    self._on_input_level(min(1.0, rms * 8.0))
                 if self._on_waterfall:
                     self._on_waterfall(mono_trimmed, rate)
 
-                # Decode with overlap from previous chunk
-                overlap = self._rx_overlap
-                decode_buf = np.concatenate((overlap, mono_trimmed)) if overlap is not None and len(overlap) > 0 else mono_trimmed
-                keep = max(1, int(rate * 1.2))
-                self._rx_overlap = decode_buf[-keep:].copy()
-
-                packets = decode_ax25_from_samples(rate, decode_buf)
-                now_ts = datetime.now().timestamp()
-                dedupe_window = max(2.0, effective_chunk + 1.0)
-
-                for pkt in packets:
-                    pkt_key = hash(pkt.text)
-                    with self._seen_lock:
-                        last_seen = self._seen_msgs.get(pkt_key)
-                        if last_seen is not None and (now_ts - last_seen) < dedupe_window:
-                            continue
-                        # Update dedup dict (time-ordered; prune old entries)
-                        self._seen_msgs[pkt_key] = now_ts
-                        self._seen_msgs.move_to_end(pkt_key)
-                        if len(self._seen_msgs) > 600:
-                            cutoff = now_ts - max(30.0, dedupe_window * 2.0)
-                            keys_to_del = [k for k, ts in self._seen_msgs.items() if ts < cutoff]
-                            for k in keys_to_del:
-                                del self._seen_msgs[k]
-
-                    self._aprs_log(f"RX {pkt.text}")
-                    if self._on_packet:
-                        self._on_packet(pkt)
+                # Enqueue for async decode — non-blocking so this thread
+                # immediately loops back to the next capture.
+                try:
+                    self._decode_queue.put_nowait((rate, mono_trimmed))
+                except queue.Full:
+                    self._aprs_log("RX: decode queue full — chunk dropped (decoder too slow)")
 
             except Exception as exc:
-                self._aprs_log(f"RX monitor error: {exc}")
+                self._aprs_log(f"RX capture error: {exc}")
                 sleep(1.0)
+
+    def _decode_loop(self, chunk_s: float) -> None:
+        """Background decode worker. Runs asynchronously so capture is never
+        blocked waiting for the AFSK discriminator / HDLC search to finish."""
+        overlap: Optional[np.ndarray] = None
+
+        while True:
+            try:
+                item = self._decode_queue.get(timeout=0.5)
+            except queue.Empty:
+                # No item yet: exit only if capture has stopped (no more items coming).
+                if not self._rx_running:
+                    break
+                continue
+
+            if item is None:
+                break   # explicit stop signal
+
+            rate, mono_trimmed = item
+            chunk_duration = len(mono_trimmed) / rate
+            dedupe_window = max(2.0, chunk_duration + 1.0)
+
+            # Prepend overlap from previous chunk to catch cross-boundary packets
+            if overlap is not None and len(overlap) > 0:
+                decode_buf = np.concatenate((overlap, mono_trimmed))
+            else:
+                decode_buf = mono_trimmed
+            keep = max(1, int(rate * 1.2))
+            overlap = decode_buf[-keep:].copy()
+
+            try:
+                packets = decode_ax25_from_samples(rate, decode_buf)
+            except Exception as exc:
+                self._aprs_log(f"RX decode error: {exc}")
+                continue
+
+            now_ts = datetime.now().timestamp()
+            for pkt in packets:
+                pkt_key = hash(pkt.text)
+                with self._seen_lock:
+                    last_seen = self._seen_msgs.get(pkt_key)
+                    if last_seen is not None and (now_ts - last_seen) < dedupe_window:
+                        continue
+                    self._seen_msgs[pkt_key] = now_ts
+                    self._seen_msgs.move_to_end(pkt_key)
+                    if len(self._seen_msgs) > 600:
+                        cutoff = now_ts - max(30.0, dedupe_window * 2.0)
+                        keys_to_del = [k for k, ts in self._seen_msgs.items() if ts < cutoff]
+                        for k in keys_to_del:
+                            del self._seen_msgs[k]
+
+                self._aprs_log(f"RX {pkt.text}")
+                if self._on_packet:
+                    self._on_packet(pkt)
 
     # ------------------------------------------------------------------
     # One-shot RX decode

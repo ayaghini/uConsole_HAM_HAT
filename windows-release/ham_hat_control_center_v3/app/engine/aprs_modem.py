@@ -479,6 +479,12 @@ def decode_ax25_from_samples(rate: int, mono: np.ndarray) -> list[DecodedPacket]
 
     merged: dict[str, DecodedPacket] = {}
     for mark_hz, space_hz in tone_pairs:
+        # Optimisation: if the standard Bell 202 pair (1200/2200) already found
+        # valid packets, skip the fallback pairs — they are only for edge cases
+        # (non-standard modems) and their expensive discriminator calls would
+        # add 2–3 seconds of unnecessary work per chunk.
+        if merged and (mark_hz, space_hz) != (1200.0, 2200.0):
+            break
         demod = _afsk_discriminator(cleaned, rate, mark_hz=mark_hz, space_hz=space_hz)
         if len(demod) < 200:
             continue
