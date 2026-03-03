@@ -1302,7 +1302,10 @@ class HamHatApp(tk.Tk):
                     device = AudioUtilities.GetMicrophone()
                     matched_name = "default microphone"
 
-                interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                # AudioDevice is a pycaw wrapper; the underlying IMMDevice COM object
+                # (which has Activate()) is at ._dev.
+                imm_dev = device._dev if hasattr(device, "_dev") else device
+                interface = imm_dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 vol = interface.QueryInterface(IAudioEndpointVolume)
                 vol.SetMasterVolumeLevelScalar(scalar, None)
                 msg = f"OS mic level → {level}% on \"{matched_name}\""
@@ -1383,7 +1386,10 @@ class HamHatApp(tk.Tk):
                     device = AudioUtilities.GetSpeaker()
                     matched_name = "default speaker"
 
-                interface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                # AudioDevice is a pycaw wrapper; the underlying IMMDevice COM object
+                # (which has Activate()) is at ._dev.
+                imm_dev = device._dev if hasattr(device, "_dev") else device
+                interface = imm_dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
                 vol = interface.QueryInterface(IAudioEndpointVolume)
                 vol.SetMasterVolumeLevelScalar(scalar, None)
                 msg = f"OS speaker level → {level}% on \"{matched_name}\""
