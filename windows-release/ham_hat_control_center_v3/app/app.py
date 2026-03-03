@@ -1255,7 +1255,10 @@ class HamHatApp(tk.Tk):
                 if selected_name:
                     sel_lower = selected_name.lower()
                     try:
-                        all_devs = AudioUtilities.GetAllDevices()
+                        import warnings as _w
+                        with _w.catch_warnings():
+                            _w.simplefilter("ignore")   # suppress pycaw COMError UserWarnings
+                            all_devs = AudioUtilities.GetAllDevices()
                         for d in all_devs:
                             if d.FriendlyName and sel_lower in d.FriendlyName.lower():
                                 device = d
