@@ -1249,6 +1249,15 @@ class HamHatApp(tk.Tk):
         selected_name: str = getattr(self, "_input_dev_name", "")
 
         def worker():
+            # Every new Python thread must call CoInitialize before using any COM
+            # object (pycaw/comtypes uses COM under the hood).  Failure to do so
+            # raises WinError -2147221008 (CO_E_NOTINITIALIZED).
+            try:
+                from comtypes import CoInitialize, CoUninitialize
+                CoInitialize()
+            except Exception:
+                CoInitialize = CoUninitialize = None  # type: ignore[assignment]
+
             try:
                 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
                 from comtypes import CLSCTX_ALL
@@ -1285,7 +1294,9 @@ class HamHatApp(tk.Tk):
                             matched_name = d.FriendlyName
                             break
                     except Exception as exc:
-                        _log.debug("OS rx level device scan error: %s", exc)
+                        err = f"OS mic level scan error: {exc}"
+                        _log.debug(err)
+                        self._evq.put_nowait(_AprsLogEvt(err))
 
                 if device is None:
                     device = AudioUtilities.GetMicrophone()
@@ -1303,6 +1314,12 @@ class HamHatApp(tk.Tk):
                 err = f"OS mic level error: {exc}"
                 _log.debug(err)
                 self._evq.put_nowait(_AprsLogEvt(err))
+            finally:
+                try:
+                    if CoUninitialize is not None:
+                        CoUninitialize()
+                except Exception:
+                    pass
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1321,6 +1338,12 @@ class HamHatApp(tk.Tk):
         selected_name: str = getattr(self, "_output_dev_name", "")
 
         def worker():
+            try:
+                from comtypes import CoInitialize, CoUninitialize
+                CoInitialize()
+            except Exception:
+                CoInitialize = CoUninitialize = None  # type: ignore[assignment]
+
             try:
                 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
                 from comtypes import CLSCTX_ALL
@@ -1352,7 +1375,9 @@ class HamHatApp(tk.Tk):
                             matched_name = d.FriendlyName
                             break
                     except Exception as exc:
-                        _log.debug("OS tx level device scan error: %s", exc)
+                        err = f"OS speaker level scan error: {exc}"
+                        _log.debug(err)
+                        self._evq.put_nowait(_AprsLogEvt(err))
 
                 if device is None:
                     device = AudioUtilities.GetSpeaker()
@@ -1366,7 +1391,15 @@ class HamHatApp(tk.Tk):
             except ImportError:
                 pass
             except Exception as exc:
-                _log.debug("OS tx level error: %s", exc)
+                err = f"OS speaker level error: {exc}"
+                _log.debug(err)
+                self._evq.put_nowait(_AprsLogEvt(err))
+            finally:
+                try:
+                    if CoUninitialize is not None:
+                        CoUninitialize()
+                except Exception:
+                    pass
 
         threading.Thread(target=worker, daemon=True).start()
 
