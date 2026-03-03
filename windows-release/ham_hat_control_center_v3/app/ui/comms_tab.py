@@ -137,11 +137,21 @@ class CommsTab(ttk.Frame):
                                     foreground="#d9edf7", height=14)
         self._msg_log.grid(row=0, column=0, sticky="nsew")
 
-        # Colour tags
-        self._msg_log.tag_configure("tx", foreground="#7ec8e3")
-        self._msg_log.tag_configure("rx", foreground="#f5a623")
-        self._msg_log.tag_configure("sys", foreground="#9cc4dd")
-        self._msg_log.tag_configure("delivered", foreground="#5dba6e")
+        # Chat-bubble colour tags.
+        # TX (right side): sender name muted blue, message body light blue.
+        # RX (left side): sender name muted amber, message body amber.
+        # lmargin / rmargin are updated dynamically in _on_msg_log_resize so
+        # bubbles stay proportional when the window is resized.
+        self._msg_log.tag_configure("tx_name", foreground="#4a7a9b",
+                                    font=("Consolas", 8), justify="right", spacing1=10)
+        self._msg_log.tag_configure("tx_msg",  foreground="#cce8f8", justify="right")
+        self._msg_log.tag_configure("tx_ok",   foreground="#5dba6e",  justify="right")
+        self._msg_log.tag_configure("rx_name", foreground="#b07020",
+                                    font=("Consolas", 8), justify="left",  spacing1=10)
+        self._msg_log.tag_configure("rx_msg",  foreground="#f5a623", justify="left")
+        self._msg_log.tag_configure("sys",     foreground="#9cc4dd", justify="center",
+                                    spacing1=4, spacing3=4)
+        self._msg_log.bind("<Configure>", self._on_msg_log_resize)
 
         # ---- Compose area ----
         cf = ttk.LabelFrame(parent, text="Send Message", padding=6)
@@ -283,20 +293,22 @@ class CommsTab(ttk.Frame):
         self._msg_log.see("end")
 
     def _render_message(self, msg: ChatMessage) -> None:
-        """Append a single message to the log with colour tagging."""
-        if msg.direction == "TX":
-            tick = " ✓" if msg.delivered else ""
-            prefix = f"[TX{tick}] {msg.src} → {msg.dst}: "
-            tag = "delivered" if msg.delivered else "tx"
-        elif msg.direction == "RX":
-            prefix = f"[RX] {msg.src}: "
-            tag = "rx"
-        else:
-            prefix = "[SYS] "
-            tag = "sys"
-        line = prefix + msg.text + "\n"
+        """Append a message in chat-bubble style: TX right, RX left."""
         self._msg_log.configure(state="normal")
-        self._msg_log.insert("end", line, (tag,))
+        if msg.direction == "TX":
+            # Small sender / recipient header, right-aligned
+            self._msg_log.insert("end", f"{msg.src} → {msg.dst}\n", ("tx_name",))
+            # Message body; green tick when ACK confirmed
+            if msg.delivered:
+                self._msg_log.insert("end", msg.text + " ✓\n", ("tx_ok",))
+            else:
+                self._msg_log.insert("end", msg.text + "\n", ("tx_msg",))
+        elif msg.direction == "RX":
+            # Small sender header, left-aligned
+            self._msg_log.insert("end", msg.src + "\n", ("rx_name",))
+            self._msg_log.insert("end", msg.text + "\n", ("rx_msg",))
+        else:
+            self._msg_log.insert("end", msg.text + "\n", ("sys",))
         self._msg_log.configure(state="disabled")
         self._msg_log.see("end")
 
@@ -323,6 +335,14 @@ class CommsTab(ttk.Frame):
     # ------------------------------------------------------------------
     # Public update methods (called from app event dispatcher)
     # ------------------------------------------------------------------
+
+    def _on_msg_log_resize(self, event: tk.Event) -> None:
+        """Keep bubble margins proportional when the message area is resized."""
+        margin = max(60, int(event.width * 0.28))
+        for tag in ("tx_name", "tx_msg", "tx_ok"):
+            self._msg_log.tag_configure(tag, lmargin1=margin, lmargin2=margin)
+        for tag in ("rx_name", "rx_msg"):
+            self._msg_log.tag_configure(tag, rmargin=margin)
 
     def on_message(self, msg: ChatMessage) -> None:
         """Called when a new message arrives (on main thread via after())."""
