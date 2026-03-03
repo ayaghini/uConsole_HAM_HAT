@@ -359,6 +359,11 @@ class AprsEngine:
     ) -> None:
         payload = build_aprs_message_payload(addressee, text, message_id)
         self._aprs_log(f"Reliable TX: id={message_id} retries={retries} timeout={timeout_s:.1f}s")
+        if not self._rx_running:
+            self._aprs_log(
+                "WARNING: RX monitor is not running — ACKs cannot be received. "
+                "Start the RX monitor before sending reliable messages."
+            )
         for attempt in range(1, retries + 1):
             try:
                 self._do_tx(payload, snap, attempt=attempt)

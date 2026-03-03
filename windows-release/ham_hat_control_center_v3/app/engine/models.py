@@ -159,7 +159,7 @@ class AppProfile:
     aprs_msg_to: str = "N0CALL-1"
     aprs_msg_text: str = ""
     aprs_reliable: bool = False
-    aprs_ack_timeout: float = 8.0
+    aprs_ack_timeout: float = 30.0
     aprs_ack_retries: int = 4
     aprs_auto_ack: bool = True
 
