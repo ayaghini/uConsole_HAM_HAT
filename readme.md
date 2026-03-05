@@ -3,7 +3,7 @@
 ## Important Update
 
 - I am now considering a first production batch.
-- If you are interested, please email: **va7ayg+hamhat@gmail.com**
+- If you are interested, please email: **va7ayg+hamhat [at] gmail [dot] com**
 - Software has moved to its dedicated repository: https://github.com/ayaghini/Ham-Radio-Hat-Software
 - Support this project on Patreon: https://www.patreon.com/c/VA7AYG
 
