@@ -1,4 +1,11 @@
-﻿# uConsole HAM HAT
+# uConsole HAM HAT
+
+## Important Update
+
+- I am now considering a first production batch.
+- If you are interested, please email: **va7ayg+hamhat@gmail.com**
+- Software has moved to its dedicated repository: https://github.com/ayaghini/Ham-Radio-Hat-Software
+- Support this project on Patreon: https://www.patreon.com/c/VA7AYG
 
 uConsole HAM HAT is a hardware and software project for SA818-based 2m radio control and APRS workflows.
 
