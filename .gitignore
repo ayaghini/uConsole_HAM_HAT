@@ -3,6 +3,7 @@
 /Resources
 /CAD
 design.md
+/.claude
 
 # Python runtime artifacts
 .venv/
