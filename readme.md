@@ -1,5 +1,20 @@
 # uConsole HAM HAT
 
+## Executive Summary (2026-04-09)
+
+Project status has moved from Rev02 baseline to a stabilized Rev03 workspace for manufacturing prep and handoff portability.
+
+Progress:
+`[█████████████████░░░] 85%`
+
+- Completed: Rev03 branch created from Rev02 with normalized project filenames (`*_rev03.*`).
+- Completed: Symbol and footprint library management migrated to project-scoped relative references.
+- Completed: Broken library/path dependencies from moved folders removed from project-level configuration.
+- Completed: Board 3D model links converted from absolute user paths to `${KIPRJMOD}` relative paths.
+- Completed: Global KiCad stale symbol table entries cleanup workflow prepared and validated.
+- In progress: BOM finalization against latest orderable list (Rev03 KiCad BOM corrected; external `BOM.csv` sync still pending local file permission/context handling).
+- Pending: Final KiCad ERC/DRC + fabrication output re-export from Rev03 after BOM lock.
+
 ## Important Update
 
 - I am now considering a first production batch.
