@@ -1,21 +1,19 @@
-﻿# Wiki Index
+# Wiki Index
+
+Last updated: 2026-04-23
 
 ## Core Docs
 
 - Project overview: `readme.md`
-- Functional specification: `docs/specifications/functional-specification.md`
-- User manual: `docs/user-manual.md`
-
-## Engineering and Operations
-
 - Source of truth map: `docs/architecture/source-of-truth.md`
 - Bring-up guide: `docs/operations/bring-up.md`
-- Manufacturing readiness (Rev02): `docs/manufacturing/rev02-readiness.md`
+- Manufacturing readiness (Rev02 history): `docs/manufacturing/rev02-readiness.md`
 
-## Release Quick Starts
+## Software Repo
 
-- Windows quick start: `windows-release/ham_hat_control_center/QUICK_START_WINDOWS.md`
-- Raspberry Pi quick start: `pi-release/ham_hat_control_center/QUICK_START.md`
+Software documentation, quick starts, and Control Center app workflows have moved:
+
+- `https://github.com/ayaghini/Ham-Radio-Hat-Software`
 
 ## Quick SA818 CLI Test
 

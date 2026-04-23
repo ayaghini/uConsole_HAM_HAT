@@ -1,32 +1,45 @@
-﻿# Source of Truth Map
+# Source of Truth Map
+
+Last updated: 2026-04-23
 
 This file defines what is canonical in this repository and what is reference material.
 
 ## Canonical Design Baseline
 
-- Electrical + PCB source of truth:
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/uC_HAM_HAT_2M_rev02.kicad_sch`
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/uC_HAM_HAT_2M_rev02.kicad_pcb`
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/uC_HAM_HAT_2M_rev02.kicad_pro`
+- Electrical + PCB source of truth (active):
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/uC_HAM_HAT_2M_rev03.kicad_sch`
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/uC_HAM_HAT_2M_rev03.kicad_pcb`
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/uC_HAM_HAT_2M_rev03.kicad_pro`
+- Previous baseline kept for reference:
+  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/`
 - Mechanical baseline:
-  - `CAD/rev01/` (latest complete enclosure set currently stored in-repo)
+  - `CAD/rev01/`
 
 ## Manufacturing Outputs (Derived From Canonical)
 
-- Fabrication and assembly outputs for Rev02:
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/production/bom.csv`
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/production/positions.csv`
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/production/netlist.ipc`
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/production/` (zip bundles)
+- Rev03 production outputs:
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/production/bom.csv`
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/production/positions.csv`
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/production/netlist.ipc`
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/production/`
 - Rule: regenerate these from KiCad source when schematic/PCB changes.
 
 ## Local Libraries and Part Data
 
-- Project part libraries:
+- Rev03 project-scoped libraries:
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/libs/project_footprints.pretty/`
+- Shared libraries in repo:
   - `Components/HAm_Extension_Footprints.pretty/`
   - `Components/HAM_Extension_symbols/`
   - `Components/uconsole.kicad_sym`
-- Rule: changes to footprints/symbols must be reviewed with Rev02 board impact.
+- Rule: changes to footprints/symbols must be reviewed against active board revision impact.
+
+## Software Boundary
+
+- This repository is hardware-focused.
+- Software moved to a dedicated repository:
+  - `https://github.com/ayaghini/Ham-Radio-Hat-Software`
+- Rule: software launch, runtime, and application behavior docs should live in the software repo.
 
 ## Reference Material (Not Source of Truth)
 
@@ -36,22 +49,23 @@ This file defines what is canonical in this repository and what is reference mat
   - `Resources/uEther/`
   - `Resources/SRFRS/`
   - `Resources/SA818 programmer/`
-- Rule: do not treat these as your active product design files.
+- Rule: do not treat these as active product design files.
 
 ## Historical Revisions
 
 - Kept for traceability and comparison:
   - `PCB/Rev00/`
   - `PCB/Rev01/`
+  - `PCB/Rev02/`
 - Rule: no new edits there unless explicitly doing historical backport work.
 
 ## Working Conventions
 
-- Create new design edits in:
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/`
-- Export manufacturing files to:
-  - `PCB/Rev02/uC_HAM_HAT_2M_rev02/production/`
-- Keep bring-up and process docs in:
+- New board edits:
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/`
+- Production exports:
+  - `PCB/Rev03/uC_HAM_HAT_2M_rev03/production/`
+- Process docs:
   - `docs/operations/`
   - `docs/manufacturing/`
   - `docs/architecture/`

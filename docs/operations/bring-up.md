@@ -1,6 +1,8 @@
-﻿# Bring-Up Guide
+# Bring-Up Guide
 
-This guide is for bring-up of the uConsole HAM HAT hardware using the current repo layout.
+Last updated: 2026-04-23
+
+This guide is for bring-up of the uConsole HAM HAT hardware using the current hardware repository layout.
 
 ## 1. Goal
 
@@ -11,7 +13,7 @@ This guide is for bring-up of the uConsole HAM HAT hardware using the current re
 
 ## 2. Required Hardware
 
-- Assembled board (Rev02 preferred).
+- Assembled board (Rev03 preferred; Rev02 still supported for comparison).
 - Connected SA818S module.
 - Antenna or proper RF load as required.
 - USB-C cable to host.
@@ -30,6 +32,9 @@ Install dependency:
 ```powershell
 python -m pip install pyserial
 ```
+
+Note: full Control Center app workflows were moved to:
+`https://github.com/ayaghini/Ham-Radio-Hat-Software`
 
 ## 4. Identify Serial Port
 
@@ -76,7 +81,7 @@ python .\Resources\SA818 programmer\SA818\sa818.py --port COM9 volume --level 5
 - Garbled response:
   - Verify 9600 baud path.
 - RF path weak/noisy:
-  - Recheck filter and grounding path in Rev02.
+  - Recheck filter and grounding path in active board revision.
 - USB or Ethernet missing:
   - Recheck LAN9514, power switches (MIC2026), and decoupling population.
 
