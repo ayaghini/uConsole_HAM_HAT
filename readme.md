@@ -2,7 +2,7 @@
 
 Hardware repository for the uConsole HAM HAT (SA818-based 2m radio board for uConsole).
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ## Repo Split (Important)
 
@@ -15,14 +15,17 @@ If you are looking for Control Center app setup, APRS/comms workflows, or platfo
 
 ## Current Hardware Status
 
-- Rev03 is the active hardware baseline in this repo.
-- Rev03 contains normalized project naming (`*_rev03.*`) and project-scoped library references.
-- Board 3D links were converted to `${KIPRJMOD}` relative paths for portability.
-- BOM and production files are present under the Rev03 production folder and continue to be finalized for repeatable manufacturing output.
+- Rev04 is the active hardware baseline in this repo.
+- Rev04 includes EMI hardening updates around USB input and SA818 power path options.
+- Rev04 libraries were normalized for portability:
+  - local footprints: `PCB/Rev04/uC_HAM_HAT_2M_rev04/libs/project_footprints.pretty/`
+  - local symbols: `PCB/Rev04/uC_HAM_HAT_2M_rev04/libs/symbols/`
+  - local 3D models: `PCB/Rev04/uC_HAM_HAT_2M_rev04/libs/3dmodels/`
+- Rev04 BOM was regenerated from schematic fields and aligned to current footprints and metadata.
 
 ## Repository Layout
 
-- `PCB/`: KiCad projects and manufacturing outputs (`Rev00` to `Rev03`).
+- `PCB/`: KiCad projects and manufacturing outputs (`Rev00` to `Rev04`).
 - `CAD/`: enclosure/mechanical assets.
 - `Components/`: shared part libraries and symbols.
 - `docs/`: architecture, operations, manufacturing, and archive docs.
@@ -34,6 +37,7 @@ If you are looking for Control Center app setup, APRS/comms workflows, or platfo
 - Source-of-truth map: [docs/architecture/source-of-truth.md](docs/architecture/source-of-truth.md)
 - Bring-up guide (hardware): [docs/operations/bring-up.md](docs/operations/bring-up.md)
 - Manufacturing readiness history: [docs/manufacturing/rev02-readiness.md](docs/manufacturing/rev02-readiness.md)
+- Rev04 implementation notes: [docs/manufacturing/rev04-implementation-notes.md](docs/manufacturing/rev04-implementation-notes.md)
 - Software repository: https://github.com/ayaghini/Ham-Radio-Hat-Software
 
 ## First Batch and Contact

@@ -4,7 +4,7 @@ Review scope: `PCB/Rev02/uC_HAM_HAT_2M_rev02/`
 Date: 2026-02-22
 Last updated note: 2026-04-23
 
-Status note: this is a historical Rev02 readiness snapshot. Active design baseline is now Rev03 (see `docs/architecture/source-of-truth.md`).
+Status note: this is a historical Rev02 readiness snapshot. Active design baseline is now Rev04 (see `docs/architecture/source-of-truth.md` and `docs/manufacturing/rev04-implementation-notes.md`).
 
 ## 1. Current Status
 

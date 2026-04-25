@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 ## Core Docs
 
@@ -8,6 +8,7 @@ Last updated: 2026-04-23
 - Source of truth map: `docs/architecture/source-of-truth.md`
 - Bring-up guide: `docs/operations/bring-up.md`
 - Manufacturing readiness (Rev02 history): `docs/manufacturing/rev02-readiness.md`
+- Rev04 implementation notes: `docs/manufacturing/rev04-implementation-notes.md`
 
 ## Software Repo
 

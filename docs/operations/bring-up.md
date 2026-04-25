@@ -1,6 +1,6 @@
 # Bring-Up Guide
 
-Last updated: 2026-04-23
+Last updated: 2026-04-24
 
 This guide is for bring-up of the uConsole HAM HAT hardware using the current hardware repository layout.
 
@@ -13,7 +13,7 @@ This guide is for bring-up of the uConsole HAM HAT hardware using the current ha
 
 ## 2. Required Hardware
 
-- Assembled board (Rev03 preferred; Rev02 still supported for comparison).
+- Assembled board (Rev04 preferred; Rev03/Rev02 supported for comparison).
 - Connected SA818S module.
 - Antenna or proper RF load as required.
 - USB-C cable to host.
@@ -82,6 +82,9 @@ python .\Resources\SA818 programmer\SA818\sa818.py --port COM9 volume --level 5
   - Verify 9600 baud path.
 - RF path weak/noisy:
   - Recheck filter and grounding path in active board revision.
+  - For Rev04 SA818 power hardening:
+    - minimum acceptable network is `+5V -> FB16 -> +5V_SA818` with `C113` close to SA818 VCC.
+    - if FL7 is not populated, ensure FL7 path is shorted/0R (not left open).
 - USB or Ethernet missing:
   - Recheck LAN9514, power switches (MIC2026), and decoupling population.
 
